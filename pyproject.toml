@@ -4,4 +4,9 @@ version = "0.1.0"
 description = "Backend stuff for LLM tools"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "fastapi>=0.118.0",
+    "openai>=2.0.1",
+    "uvicorn>=0.30.0",
+    "pydantic-settings>=2.0.0",
+]

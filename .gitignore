@@ -1,1 +1,11 @@
-**/__pycache__
+# Python
+**/__pycache__/
+
+# Virtual environments
+.venv
+
+# Environment variables
+.env
+
+# UV
+.python-version
