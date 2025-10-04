@@ -15,7 +15,9 @@ from app.models.chat.models import (
 from app.services.llm_service import FunctionArgument, LlmFunctionSpec, LlmMessage, LlmService
 
 
-# TODO: db
+# TODO: use db instead of static variable
+_static_threads: dict[str, "ChatService.ThreadAndMessages"] = {}
+
 class ChatService:
 
     @dataclass
@@ -24,7 +26,7 @@ class ChatService:
         messages: list[ChatMessage]
 
     def __init__(self, llm_service: LlmService) -> None:
-        self._threads: dict[str, ChatService.ThreadAndMessages] = {}
+        self._threads: dict[str, ChatService.ThreadAndMessages] = _static_threads
         self._llm_service = llm_service
     
     async def create_thread(self, request: CreateChatThreadRequest) -> ChatThread:
@@ -50,7 +52,7 @@ class ChatService:
         return thread
     
     async def get_thread(self, thread_id: str) -> ChatThread | None:
-        return self._threads.get(thread_id)
+        return self._threads.get(thread_id).thread
     
     async def list_threads(self) -> list[ChatThread]:
         return [t.thread for t in sorted(
@@ -126,6 +128,7 @@ class ChatService:
             max_tokens=None,
             api_key=api_key,
         )
+
 
         return user_message_id
 

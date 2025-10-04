@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import Response as FastAPIResponse
 
-from app.api.dependencies import ChatServiceDep
-from app.middleware.auth import verify_api_key
+from app.api.dependencies import ChatServiceDep, RequestContextDep
 from app.models.chat.requests import (
     CreateChatThreadRequest,
     SendMessageRequest,
@@ -17,7 +16,6 @@ from app.models.chat.responses import (
 router = APIRouter(
     prefix="/chat",
     tags=["chat"],
-    dependencies=[Depends(verify_api_key)],
 )
 
 
@@ -25,18 +23,20 @@ router = APIRouter(
 async def create_thread(
     request: CreateChatThreadRequest,
     chat_service: ChatServiceDep,
+    context: RequestContextDep,
 ) -> ChatThreadResponse:
-    return await chat_service.create_thread(request)
+    return (await chat_service.create_thread(request)).to_response()
 
 
 @router.get("/threads", response_model=ChatThreadListResponse)
 async def list_threads(
-    chat_service: ChatServiceDep
+    chat_service: ChatServiceDep,
+    context: RequestContextDep,
 ) -> ChatThreadListResponse:
     threads = await chat_service.list_threads()
     
     return ChatThreadListResponse(
-        threads=threads,
+        threads=[t.to_response() for t in threads],
     )
 
 
@@ -44,14 +44,16 @@ async def list_threads(
 async def get_thread(
     thread_id: str,
     chat_service: ChatServiceDep,
+    context: RequestContextDep,
 ) -> ChatThreadResponse:
     thread = await chat_service.get_thread(thread_id)
-    if not thread:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Thread not found",
-        )
-    return thread
+    if thread:
+        return thread.to_response()
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Thread not found",
+    )
 
 
 @router.patch("/threads/{thread_id}", response_model=ChatThreadResponse)
@@ -59,14 +61,16 @@ async def update_thread(
     thread_id: str,
     request: UpdateThreadRequest,
     chat_service: ChatServiceDep,
+    context: RequestContextDep,
 ) -> ChatThreadResponse:
     thread = await chat_service.update_thread(thread_id, request)
-    if not thread:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Thread not found",
-        )
-    return thread
+    if thread:
+        return thread.to_response()
+        
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Thread not found",
+    )
 
 
 @router.post("/threads/{thread_id}/messages", status_code=status.HTTP_202_ACCEPTED)
@@ -74,8 +78,9 @@ async def send_message(
     thread_id: str,
     request: SendMessageRequest,
     chat_service: ChatServiceDep,
+    context: RequestContextDep,
 ) -> FastAPIResponse:
-    new_message_id = await chat_service.send_message(thread_id, request, api_key="TODO")
+    new_message_id = await chat_service.send_message(thread_id, request, api_key=context.openrouter_api_key)
     if new_message_id is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -92,11 +97,13 @@ async def send_message(
 async def get_messages(
     thread_id: str,
     chat_service: ChatServiceDep,
+    context: RequestContextDep,
 ) -> list[ChatMessageResponse]:
     messages = await chat_service.get_messages(thread_id)
-    if messages is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Thread not found",
-        )
-    return messages
+    if messages is not None:
+        return [m.to_response() for m in messages]
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Thread not found",
+    )
