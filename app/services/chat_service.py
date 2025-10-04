@@ -1,8 +1,9 @@
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
-from dataclasses import dataclass
 
+from app.db.chat_repo import ChatRepo
 from app.models.chat.requests import (
     CreateChatThreadRequest,
     SendMessageRequest,
@@ -15,128 +16,157 @@ from app.models.chat.models import (
 from app.services.llm_service import FunctionArgument, LlmFunctionSpec, LlmMessage, LlmService
 
 
-# TODO: use db instead of static variable
-_static_threads: dict[str, "ChatService.ThreadAndMessages"] = {}
-
 class ChatService:
-
-    @dataclass
-    class ThreadAndMessages:
-        thread: ChatThread
-        messages: list[ChatMessage]
-
-    def __init__(self, llm_service: LlmService) -> None:
-        self._threads: dict[str, ChatService.ThreadAndMessages] = _static_threads
+    def __init__(self, llm_service: LlmService, chat_repo: ChatRepo) -> None:
         self._llm_service = llm_service
+        self._chat_repo = chat_repo
     
-    async def create_thread(self, request: CreateChatThreadRequest) -> ChatThread:
+    async def create_thread(self, user_id: str, request: CreateChatThreadRequest) -> ChatThread:
         thread_id = str(uuid4())
         now = datetime.now(timezone.utc)
         
-        thread = ChatThread(
-            id=thread_id,
+        thread = self._chat_repo.create_thread(
+            thread_id=thread_id,
+            user_id=user_id,
             title=request.title,
             description=request.description,
-            created_at=now,
-            updated_at=now,
-            deleted_at=None,
             model_name=request.model_name,
-            message_count=0,
-        )
-        
-        self._threads[thread_id] = ChatService.ThreadAndMessages(
-            thread=thread,
-            messages=[],
+            created_at=now,
         )
         
         return thread
     
-    async def get_thread(self, thread_id: str) -> ChatThread | None:
-        return self._threads.get(thread_id).thread
+    async def get_thread(self, thread_id: str, user_id: str) -> ChatThread | None:
+        return self._chat_repo.get_thread_by_id_and_user(thread_id, user_id)
     
-    async def list_threads(self) -> list[ChatThread]:
-        return [t.thread for t in sorted(
-            self._threads.values(),
-            key=lambda t: t.thread.updated_at,
-            reverse=True,
-        )]
+    async def list_threads(self, user_id: str) -> list[ChatThread]:
+        return self._chat_repo.list_threads_by_user(user_id)
     
-    async def update_thread(self, thread_id: str, request: UpdateThreadRequest) -> ChatThread | None:
-        thread = self._threads.get(thread_id)
-        if not thread:
+    async def update_thread(self, thread_id: str, user_id: str, request: UpdateThreadRequest) -> ChatThread | None:
+        return self._chat_repo.update_thread(
+            thread_id=thread_id,
+            user_id=user_id,
+            title=request.title,
+            description=request.description,
+        )
+    
+    async def send_message(self, thread_id: str, user_id: str, request: SendMessageRequest, api_key: str | None = None) -> str | None:
+        # Verify thread exists and belongs to user
+        thread = await self.get_thread(thread_id, user_id)
+        if thread is None:
             return None
         
-        if request.title is not None:
-            thread.thread.title = request.title
-        if request.description is not None:
-            thread.thread.description = request.description
-        
-        thread.thread.updated_at = datetime.now(timezone.utc)
-        
-        return thread.thread
-    
-    async def send_message(self, thread_id: str, request: SendMessageRequest, api_key: str | None = None) -> str | None:
-        if (thread := self._threads.get(thread_id)) is None:
-            return None
-        
+        # Create and save user message
         user_message_id = str(uuid4())
         now = datetime.now(timezone.utc)
         
-        user_message = ChatMessage(
-            id=user_message_id,
+        self._chat_repo.add_message(
+            message_id=user_message_id,
+            thread_id=thread_id,
             role="user",
             content=request.content,
             created_at=now,
         )
-
-        thread.messages.append(user_message)
-
-        _ = self._llm_service.get_completion(
-            model=thread.thread.model_name,
-            messages=[
-                LlmMessage(
-                    role="system", 
-                    content="You are a helpful assistant that can help with tasks and questions."
-                    + " Current conversation title: {thread.thread.title}. Current conversation description: {thread.thread.description}."
-                    + " You can use a tool to set the title and/or description of the conversation."
-                    + " If they are not set, please set them to something relevant to the conversation."
-                    + " Otherwise, you can update them if necessary, but if they still fit the conversation, do not change them."),
-                *[LlmMessage(role=msg.role, content=msg.content) for msg in thread.messages],
-            ],
-            tools=[
-                LlmFunctionSpec(
-                    name="set_metaddata",
-                    description="Set title and/or description of the conversation",
-                    parameters=[
-                        FunctionArgument(
-                            name="title",
-                            type="string",
-                            description="The title of the conversation",
-                            required=False,
-                        ),
-                        FunctionArgument(
-                            name="description",
-                            type="string",
-                            description="The description of the conversation",
-                            required=False,
-                        ),
-                    ],
-                    execute=lambda args: self._set_metadata_by_llm(thread, args),
-                ),
-            ],
-            temperature=0.7,
-            max_tokens=None,
-            api_key=api_key,
-        )
-
-
-        return user_message_id
-
-    def _set_metadata_by_llm(self, thread: ThreadAndMessages, args: dict[str, Any]) -> None:
-        _ = self.update_thread(thread.thread.id, UpdateThreadRequest(title=args.get("title"), description=args.get("description")))
-    
-    async def get_messages(self, thread_id: str) -> list[ChatMessage] | None:
-        if (thread := self._threads.get(thread_id)) is None:
-            return None
         
-        return thread.messages
+        # Start LLM processing in background (fire and forget)
+        asyncio.create_task(
+            self._process_llm_response(
+                thread_id=thread_id,
+                user_id=user_id,
+                model_name=thread.model_name,
+                api_key=api_key,
+            )
+        )
+        
+        return user_message_id
+    
+    async def _process_llm_response(
+        self,
+        thread_id: str,
+        user_id: str,
+        model_name: str,
+        api_key: str | None,
+    ) -> None:
+        """Process LLM response in background and save to database"""
+        try:
+            # Get all messages for context
+            messages = self._chat_repo.get_messages(thread_id, user_id)
+            if messages is None:
+                return
+            
+            # Get thread for metadata
+            thread = self._chat_repo.get_thread_by_id_and_user(thread_id, user_id)
+            if thread is None:
+                return
+            
+            # Prepare messages for LLM
+            llm_messages = [
+                LlmMessage(
+                    role="system",
+                    content=(
+                        f"You are a helpful assistant that can help with tasks and questions."
+                        f" Current conversation title: {thread.title}. Current conversation description: {thread.description}."
+                        f" You can use a tool to set the title and/or description of the conversation."
+                        f" If they are not set, please set them to something relevant to the conversation."
+                        f" Otherwise, you can update them if necessary, but if they still fit the conversation, do not change them."
+                    )
+                ),
+                *[LlmMessage(role=msg.role, content=msg.content) for msg in messages],
+            ]
+            
+            # Call LLM
+            response_content = await self._llm_service.get_completion(
+                model=model_name,
+                messages=llm_messages,
+                tools=[
+                    LlmFunctionSpec(
+                        name="set_metadata",
+                        description="Set title and/or description of the conversation",
+                        parameters=[
+                            FunctionArgument(
+                                name="title",
+                                type="string",
+                                description="The title of the conversation",
+                                required=False,
+                            ),
+                            FunctionArgument(
+                                name="description",
+                                type="string",
+                                description="The description of the conversation",
+                                required=False,
+                            ),
+                        ],
+                        execute=lambda args: self._set_metadata_by_llm(thread_id, user_id, args),
+                    ),
+                ],
+                temperature=0.7,
+                max_tokens=None,
+                api_key=api_key,
+            )
+            
+            # Save assistant response
+            assistant_message_id = str(uuid4())
+            now = datetime.now(timezone.utc)
+            
+            self._chat_repo.add_message(
+                message_id=assistant_message_id,
+                thread_id=thread_id,
+                role="assistant",
+                content=response_content,
+                created_at=now,
+            )
+        except Exception as e:
+            # Log error but don't crash
+            print(f"Error processing LLM response: {e}")
+    
+    def _set_metadata_by_llm(self, thread_id: str, user_id: str, args: dict[str, Any]) -> None:
+        """Called by LLM to update thread metadata"""
+        self._chat_repo.update_thread(
+            thread_id=thread_id,
+            user_id=user_id,
+            title=args.get("title"),
+            description=args.get("description"),
+        )
+    
+    async def get_messages(self, thread_id: str, user_id: str) -> list[ChatMessage] | None:
+        return self._chat_repo.get_messages(thread_id, user_id)

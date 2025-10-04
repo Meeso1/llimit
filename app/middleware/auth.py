@@ -1,6 +1,4 @@
-from typing import Annotated
-
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import HTTPException, Security, status
 from fastapi.security import APIKeyHeader
 
 from app.core.context import RequestContext
@@ -18,7 +16,7 @@ async def create_request_context(
     This dependency provides request-scoped context to all services.
     """
     # Import here to avoid circular dependency
-    from app.api.dependencies import get_user_service
+    from app.api.dependencies import get_user_repo
     
     # Validate API key
     if api_key is None:
@@ -35,8 +33,8 @@ async def create_request_context(
         )
     
     # Get user by API key
-    user_service = get_user_service()
-    user = user_service.get_user_by_api_key(api_key)
+    user_repo = get_user_repo()
+    user = user_repo.get_user_by_api_key(api_key)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

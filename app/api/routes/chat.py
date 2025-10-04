@@ -25,7 +25,7 @@ async def create_thread(
     chat_service: ChatServiceDep,
     context: RequestContextDep,
 ) -> ChatThreadResponse:
-    return (await chat_service.create_thread(request)).to_response()
+    return (await chat_service.create_thread(context.user_id, request)).to_response()
 
 
 @router.get("/threads", response_model=ChatThreadListResponse)
@@ -33,7 +33,7 @@ async def list_threads(
     chat_service: ChatServiceDep,
     context: RequestContextDep,
 ) -> ChatThreadListResponse:
-    threads = await chat_service.list_threads()
+    threads = await chat_service.list_threads(context.user_id)
     
     return ChatThreadListResponse(
         threads=[t.to_response() for t in threads],
@@ -46,7 +46,7 @@ async def get_thread(
     chat_service: ChatServiceDep,
     context: RequestContextDep,
 ) -> ChatThreadResponse:
-    thread = await chat_service.get_thread(thread_id)
+    thread = await chat_service.get_thread(thread_id, context.user_id)
     if thread:
         return thread.to_response()
 
@@ -63,7 +63,7 @@ async def update_thread(
     chat_service: ChatServiceDep,
     context: RequestContextDep,
 ) -> ChatThreadResponse:
-    thread = await chat_service.update_thread(thread_id, request)
+    thread = await chat_service.update_thread(thread_id, context.user_id, request)
     if thread:
         return thread.to_response()
         
@@ -80,7 +80,12 @@ async def send_message(
     chat_service: ChatServiceDep,
     context: RequestContextDep,
 ) -> FastAPIResponse:
-    new_message_id = await chat_service.send_message(thread_id, request, api_key=context.openrouter_api_key)
+    new_message_id = await chat_service.send_message(
+        thread_id, 
+        context.user_id, 
+        request, 
+        api_key=context.openrouter_api_key
+    )
     if new_message_id is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -99,7 +104,7 @@ async def get_messages(
     chat_service: ChatServiceDep,
     context: RequestContextDep,
 ) -> list[ChatMessageResponse]:
-    messages = await chat_service.get_messages(thread_id)
+    messages = await chat_service.get_messages(thread_id, context.user_id)
     if messages is not None:
         return [m.to_response() for m in messages]
 

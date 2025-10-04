@@ -23,6 +23,7 @@ class ChatMessage:
 @dataclass
 class ChatThread:
     id: str
+    user_id: str
     title: str | None
     description: str | None
     created_at: datetime
