@@ -73,7 +73,7 @@ class ChatService:
         
         return thread.thread
     
-    async def send_message(self, thread_id: str, request: SendMessageRequest) -> str | None:
+    async def send_message(self, thread_id: str, request: SendMessageRequest, api_key: str | None = None) -> str | None:
         if (thread := self._threads.get(thread_id)) is None:
             return None
         
@@ -124,6 +124,7 @@ class ChatService:
             ],
             temperature=0.7,
             max_tokens=None,
+            api_key=api_key,
         )
 
         return user_message_id

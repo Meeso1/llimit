@@ -31,17 +31,12 @@ async def create_thread(
 
 @router.get("/threads", response_model=ChatThreadListResponse)
 async def list_threads(
-    chat_service: ChatServiceDep,
-    page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    chat_service: ChatServiceDep
 ) -> ChatThreadListResponse:
-    threads, total = await chat_service.list_threads(page=page, page_size=page_size)
+    threads = await chat_service.list_threads()
     
     return ChatThreadListResponse(
         threads=threads,
-        total=total,
-        page=page,
-        page_size=page_size,
     )
 
 
@@ -80,7 +75,7 @@ async def send_message(
     request: SendMessageRequest,
     chat_service: ChatServiceDep,
 ) -> FastAPIResponse:
-    new_message_id = await chat_service.send_message(thread_id, request)
+    new_message_id = await chat_service.send_message(thread_id, request, api_key="TODO")
     if new_message_id is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
