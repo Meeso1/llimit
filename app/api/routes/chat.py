@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response as FastAPIResponse
 
 from app.api.dependencies import ChatServiceDep
 from app.middleware.auth import verify_api_key
@@ -9,10 +9,9 @@ from app.models.chat.requests import (
     UpdateThreadRequest,
 )
 from app.models.chat.responses import (
-    ChatMessage,
+    ChatMessageResponse,
     ChatThreadListResponse,
     ChatThreadResponse,
-    SendMessageResponse,
 )
 
 router = APIRouter(
@@ -75,37 +74,30 @@ async def update_thread(
     return thread
 
 
-@router.post("/threads/{thread_id}/messages", response_model=SendMessageResponse)
+@router.post("/threads/{thread_id}/messages", status_code=status.HTTP_202_ACCEPTED)
 async def send_message(
     thread_id: str,
     request: SendMessageRequest,
     chat_service: ChatServiceDep,
-) -> SendMessageResponse | StreamingResponse:
-    if request.stream:
-        async def event_generator():
-            yield f"data: {{'type': 'message_start', 'thread_id': '{thread_id}'}}\n\n"
-            yield f"data: {{'type': 'content_delta', 'content': 'Mock streaming response...'}}\n\n"
-            yield f"data: {{'type': 'message_end', 'finish_reason': 'stop'}}\n\n"
-        
-        return StreamingResponse(
-            event_generator(),
-            media_type="text/event-stream",
-        )
-    
-    response = await chat_service.send_message(thread_id, request)
-    if not response:
+) -> FastAPIResponse:
+    new_message_id = await chat_service.send_message(thread_id, request)
+    if new_message_id is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Thread not found",
         )
-    return response
+
+    return FastAPIResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        headers={"Location": new_message_id}
+    )
 
 
-@router.get("/threads/{thread_id}/messages", response_model=list[ChatMessage])
+@router.get("/threads/{thread_id}/messages", response_model=list[ChatMessageResponse])
 async def get_messages(
     thread_id: str,
     chat_service: ChatServiceDep,
-) -> list[ChatMessage]:
+) -> list[ChatMessageResponse]:
     messages = await chat_service.get_messages(thread_id)
     if messages is None:
         raise HTTPException(

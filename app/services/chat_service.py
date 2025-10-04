@@ -1,159 +1,138 @@
 from datetime import datetime, timezone
+from typing import Any
 from uuid import uuid4
+from dataclasses import dataclass
 
 from app.models.chat.requests import (
     CreateChatThreadRequest,
     SendMessageRequest,
     UpdateThreadRequest,
 )
-from app.models.chat.responses import (
+from app.models.chat.models import (
+    ChatThread,
     ChatMessage,
-    ChatThreadResponse,
-    SendMessageResponse,
 )
+from app.services.llm_service import FunctionArgument, LlmFunctionSpec, LlmMessage, LlmService
 
 
+# TODO: db
 class ChatService:
-    def __init__(self) -> None:
-        self._threads: dict[str, dict] = {}
-        self._messages: dict[str, list[dict]] = {}
+
+    @dataclass
+    class ThreadAndMessages:
+        thread: ChatThread
+        messages: list[ChatMessage]
+
+    def __init__(self, llm_service: LlmService) -> None:
+        self._threads: dict[str, ChatService.ThreadAndMessages] = {}
+        self._llm_service = llm_service
     
-    async def create_thread(self, request: CreateChatThreadRequest) -> ChatThreadResponse:
+    async def create_thread(self, request: CreateChatThreadRequest) -> ChatThread:
         thread_id = str(uuid4())
         now = datetime.now(timezone.utc)
         
-        thread = {
-            "id": thread_id,
-            "title": request.title or "New Conversation",
-            "description": None,
-            "created_at": now,
-            "updated_at": now,
-            "archived": False,
-            "metadata": request.metadata,
-        }
-        
-        self._threads[thread_id] = thread
-        self._messages[thread_id] = []
-        
-        return ChatThreadResponse(
-            id=thread["id"],
-            title=thread["title"],
-            description=thread["description"],
-            created_at=thread["created_at"],
-            updated_at=thread["updated_at"],
+        thread = ChatThread(
+            id=thread_id,
+            title=request.title,
+            description=request.description,
+            created_at=now,
+            updated_at=now,
+            deleted_at=None,
+            model_name=request.model_name,
             message_count=0,
-            archived=thread["archived"],
-            metadata=thread["metadata"],
         )
-    
-    async def get_thread(self, thread_id: str) -> ChatThreadResponse | None:
-        thread = self._threads.get(thread_id)
-        if not thread:
-            return None
         
-        message_count = len(self._messages.get(thread_id, []))
-        
-        return ChatThreadResponse(
-            id=thread["id"],
-            title=thread["title"],
-            description=thread["description"],
-            created_at=thread["created_at"],
-            updated_at=thread["updated_at"],
-            message_count=message_count,
-            archived=thread["archived"],
-            metadata=thread["metadata"],
+        self._threads[thread_id] = ChatService.ThreadAndMessages(
+            thread=thread,
+            messages=[],
         )
+        
+        return thread
     
-    async def list_threads(self, page: int = 1, page_size: int = 20) -> tuple[list[ChatThreadResponse], int]:
-        all_threads = sorted(
+    async def get_thread(self, thread_id: str) -> ChatThread | None:
+        return self._threads.get(thread_id)
+    
+    async def list_threads(self) -> list[ChatThread]:
+        return [t.thread for t in sorted(
             self._threads.values(),
-            key=lambda t: t["updated_at"],
+            key=lambda t: t.thread.updated_at,
             reverse=True,
-        )
-        
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        page_threads = all_threads[start_idx:end_idx]
-        
-        responses = [
-            ChatThreadResponse(
-                id=thread["id"],
-                title=thread["title"],
-                description=thread["description"],
-                created_at=thread["created_at"],
-                updated_at=thread["updated_at"],
-                message_count=len(self._messages.get(thread["id"], [])),
-                archived=thread["archived"],
-                metadata=thread["metadata"],
-            )
-            for thread in page_threads
-        ]
-        
-        return responses, len(all_threads)
+        )]
     
-    async def update_thread(self, thread_id: str, request: UpdateThreadRequest) -> ChatThreadResponse | None:
+    async def update_thread(self, thread_id: str, request: UpdateThreadRequest) -> ChatThread | None:
         thread = self._threads.get(thread_id)
         if not thread:
             return None
         
         if request.title is not None:
-            thread["title"] = request.title
+            thread.thread.title = request.title
         if request.description is not None:
-            thread["description"] = request.description
-        if request.archived is not None:
-            thread["archived"] = request.archived
+            thread.thread.description = request.description
         
-        thread["updated_at"] = datetime.now(timezone.utc)
+        thread.thread.updated_at = datetime.now(timezone.utc)
         
-        return await self.get_thread(thread_id)
+        return thread.thread
     
-    async def send_message(self, thread_id: str, request: SendMessageRequest) -> SendMessageResponse | None:
-        if thread_id not in self._threads:
+    async def send_message(self, thread_id: str, request: SendMessageRequest) -> str | None:
+        if (thread := self._threads.get(thread_id)) is None:
             return None
         
         user_message_id = str(uuid4())
         now = datetime.now(timezone.utc)
         
-        user_message = {
-            "id": user_message_id,
-            "role": "user",
-            "content": request.content,
-            "created_at": now,
-        }
-        self._messages[thread_id].append(user_message)
-        
-        assistant_message_id = str(uuid4())
-        assistant_content = f"Mock response to: {request.content[:50]}..."
-        
-        assistant_message = {
-            "id": assistant_message_id,
-            "role": "assistant",
-            "content": assistant_content,
-            "created_at": datetime.now(timezone.utc),
-        }
-        self._messages[thread_id].append(assistant_message)
-        
-        self._threads[thread_id]["updated_at"] = datetime.now(timezone.utc)
-        
-        return SendMessageResponse(
-            message_id=assistant_message_id,
-            thread_id=thread_id,
-            content=assistant_content,
-            created_at=assistant_message["created_at"],
-            finish_reason="stop",
+        user_message = ChatMessage(
+            id=user_message_id,
+            role="user",
+            content=request.content,
+            created_at=now,
         )
+
+        thread.messages.append(user_message)
+
+        _ = self._llm_service.get_completion(
+            model=thread.thread.model_name,
+            messages=[
+                LlmMessage(
+                    role="system", 
+                    content="You are a helpful assistant that can help with tasks and questions."
+                    + " Current conversation title: {thread.thread.title}. Current conversation description: {thread.thread.description}."
+                    + " You can use a tool to set the title and/or description of the conversation."
+                    + " If they are not set, please set them to something relevant to the conversation."
+                    + " Otherwise, you can update them if necessary, but if they still fit the conversation, do not change them."),
+                *[LlmMessage(role=msg.role, content=msg.content) for msg in thread.messages],
+            ],
+            tools=[
+                LlmFunctionSpec(
+                    name="set_metaddata",
+                    description="Set title and/or description of the conversation",
+                    parameters=[
+                        FunctionArgument(
+                            name="title",
+                            type="string",
+                            description="The title of the conversation",
+                            required=False,
+                        ),
+                        FunctionArgument(
+                            name="description",
+                            type="string",
+                            description="The description of the conversation",
+                            required=False,
+                        ),
+                    ],
+                    execute=lambda args: self._set_metadata_by_llm(thread, args),
+                ),
+            ],
+            temperature=0.7,
+            max_tokens=None,
+        )
+
+        return user_message_id
+
+    def _set_metadata_by_llm(self, thread: ThreadAndMessages, args: dict[str, Any]) -> None:
+        _ = self.update_thread(thread.thread.id, UpdateThreadRequest(title=args.get("title"), description=args.get("description")))
     
     async def get_messages(self, thread_id: str) -> list[ChatMessage] | None:
-        if thread_id not in self._threads:
+        if (thread := self._threads.get(thread_id)) is None:
             return None
         
-        messages = self._messages.get(thread_id, [])
-        return [
-            ChatMessage(
-                id=msg["id"],
-                role=msg["role"],
-                content=msg["content"],
-                created_at=msg["created_at"],
-            )
-            for msg in messages
-        ]
+        return thread.messages

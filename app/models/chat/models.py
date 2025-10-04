@@ -1,15 +1,17 @@
 from datetime import datetime
-from pydantic import BaseModel
+from dataclasses import dataclass
 
 
-class ChatMessageResponse(BaseModel):
+@dataclass
+class ChatMessage:
     id: str
     role: str
     content: str
     created_at: datetime
 
 
-class ChatThreadResponse(BaseModel):
+@dataclass
+class ChatThread:
     id: str
     title: str | None
     description: str | None
@@ -20,5 +22,7 @@ class ChatThreadResponse(BaseModel):
     message_count: int
 
 
-class ChatThreadListResponse(BaseModel):
-    threads: list[ChatThreadResponse]
+@dataclass
+class ThreadWithMessages:
+    thread: ChatThread
+    messages: list[ChatMessage]
