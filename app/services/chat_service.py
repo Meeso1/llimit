@@ -84,7 +84,7 @@ class ChatService:
         thread_id: str,
         user_id: str,
         model_name: str,
-        api_key: str | None,
+        api_key: str | None, # TODO: Why can be none?
     ) -> None:
         """Process LLM response in background and save to database"""
         try:
@@ -105,12 +105,14 @@ class ChatService:
                     content=(
                         f"You are a helpful assistant that can help with tasks and questions."
                         f" Current conversation title: {(thread.title or "[Not set]")}. Current conversation description: {(thread.description or "[Not set]")}."
-                    )
+                    ),
+                    additional_data={},
                 ),
                 *[LlmMessage(role=msg.role, content=msg.content, additional_data=msg.additional_data) for msg in messages],
             ]
             
             response = await self._llm_service.get_completion(
+                api_key=api_key,
                 model=model_name,
                 messages=llm_messages,
                 additional_requested_data={
@@ -118,7 +120,6 @@ class ChatService:
                     "description": "Description of the conversation. Only return this field if the description should be set/updated. If current description is appropriate, do not return this field.",
                 },
                 temperature=0.7,
-                api_key=api_key,
             )
             
             # Save assistant response

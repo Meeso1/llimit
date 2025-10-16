@@ -8,14 +8,14 @@ from app.db.database import Database
 from app.db.user_repo import UserRepo
 from app.middleware.auth import create_request_context
 from app.services.chat_service import ChatService
-from app.services.llm_service import LlmService
-
+from app.services.llm_service_base import LlmService
+from app.services.llm_service import OpenRouterLlmService
 
 # Singleton instances
 _database_instance = Database()
 _user_repo_instance = UserRepo(_database_instance)
 _chat_repo_instance = ChatRepo(_database_instance)
-_llm_service_instance = LlmService()
+_llm_service_instance = OpenRouterLlmService()
 
 
 def get_database() -> Database:
