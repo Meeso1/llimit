@@ -7,6 +7,7 @@ class ChatMessageResponse(BaseModel):
     role: str
     content: str
     created_at: datetime
+    additional_data: dict[str, str]
 
 
 class ChatThreadResponse(BaseModel):

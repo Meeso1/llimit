@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 
 from app.db.database import Database
 from app.models.chat.models import ChatThread, ChatMessage
@@ -137,14 +138,15 @@ class ChatRepo:
         role: str,
         content: str,
         created_at: datetime,
+        additional_data: dict[str, str] | None = None,
     ) -> None:
         """Add a message to a thread"""
         self.db.execute_update(
             """
-            INSERT INTO chat_messages (id, thread_id, role, content, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO chat_messages (id, thread_id, role, content, created_at, additional_data)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (message_id, thread_id, role, content, created_at.isoformat()),
+            (message_id, thread_id, role, content, created_at.isoformat(), json.dumps(additional_data) if additional_data else None),
         )
         
         # Update thread's updated_at
@@ -162,7 +164,7 @@ class ChatRepo:
         
         rows = self.db.execute_query(
             """
-            SELECT id, role, content, created_at
+            SELECT id, role, content, created_at, additional_data
             FROM chat_messages
             WHERE thread_id = ?
             ORDER BY created_at ASC
@@ -176,6 +178,7 @@ class ChatRepo:
                 role=row["role"],
                 content=row["content"],
                 created_at=datetime.fromisoformat(row["created_at"]),
+                additional_data=json.loads(row["additional_data"]) if row["additional_data"] else None,
             )
             for row in rows
         ]

@@ -1,6 +1,5 @@
 import asyncio
 from datetime import datetime, timezone
-from typing import Any
 from uuid import uuid4
 
 from app.db.chat_repo import ChatRepo
@@ -13,7 +12,7 @@ from app.models.chat.models import (
     ChatThread,
     ChatMessage,
 )
-from app.services.llm_service import FunctionArgument, LlmFunctionSpec, LlmMessage, LlmService
+from app.services.llm_service import LlmMessage, LlmService
 
 
 class ChatService:
@@ -105,42 +104,20 @@ class ChatService:
                     role="system",
                     content=(
                         f"You are a helpful assistant that can help with tasks and questions."
-                        f" Current conversation title: {thread.title}. Current conversation description: {thread.description}."
-                        f" You can use a tool to set the title and/or description of the conversation."
-                        f" If they are not set, please set them to something relevant to the conversation."
-                        f" Otherwise, you can update them if necessary, but if they still fit the conversation, do not change them."
+                        f" Current conversation title: {(thread.title or "[Not set]")}. Current conversation description: {(thread.description or "[Not set]")}."
                     )
                 ),
-                *[LlmMessage(role=msg.role, content=msg.content) for msg in messages],
+                *[LlmMessage(role=msg.role, content=msg.content, additional_data=msg.additional_data) for msg in messages],
             ]
             
-            # Call LLM
-            response_content = await self._llm_service.get_completion(
+            response = await self._llm_service.get_completion(
                 model=model_name,
                 messages=llm_messages,
-                tools=[
-                    LlmFunctionSpec(
-                        name="set_metadata",
-                        description="Set title and/or description of the conversation",
-                        parameters=[
-                            FunctionArgument(
-                                name="title",
-                                type="string",
-                                description="The title of the conversation",
-                                required=False,
-                            ),
-                            FunctionArgument(
-                                name="description",
-                                type="string",
-                                description="The description of the conversation",
-                                required=False,
-                            ),
-                        ],
-                        execute=lambda args: self._set_metadata_by_llm(thread_id, user_id, args),
-                    ),
-                ],
+                additional_requested_data={
+                    "title": "Title of the conversation. Only return this field if the title should be set/updated. If current title is appropriate, do not return this field.",
+                    "description": "Description of the conversation. Only return this field if the description should be set/updated. If current description is appropriate, do not return this field.",
+                },
                 temperature=0.7,
-                max_tokens=None,
                 api_key=api_key,
             )
             
@@ -152,21 +129,25 @@ class ChatService:
                 message_id=assistant_message_id,
                 thread_id=thread_id,
                 role="assistant",
-                content=response_content,
+                content=response.content,
+                additional_data=response.additional_data,
                 created_at=now,
             )
+
+            # Update thread metadata if needed
+            new_title = response.additional_data.get("title")
+            new_description = response.additional_data.get("description")
+
+            if new_title is not None or new_description is not None:
+                self._chat_repo.update_thread(
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    title=new_title,
+                    description=new_description,
+                )
         except Exception as e:
             # Log error but don't crash
             print(f"Error processing LLM response: {e}")
-    
-    def _set_metadata_by_llm(self, thread_id: str, user_id: str, args: dict[str, Any]) -> None:
-        """Called by LLM to update thread metadata"""
-        self._chat_repo.update_thread(
-            thread_id=thread_id,
-            user_id=user_id,
-            title=args.get("title"),
-            description=args.get("description"),
-        )
     
     async def get_messages(self, thread_id: str, user_id: str) -> list[ChatMessage] | None:
         return self._chat_repo.get_messages(thread_id, user_id)

@@ -10,6 +10,7 @@ class ChatMessage:
     role: str
     content: str
     created_at: datetime
+    additional_data: dict[str, str]
 
     def to_response(self) -> ChatMessageResponse:
         return ChatMessageResponse(
@@ -17,6 +18,7 @@ class ChatMessage:
             role=self.role,
             content=self.content,
             created_at=self.created_at,
+            additional_data=self.additional_data,
         )
 
 
