@@ -87,8 +87,87 @@ class OpenRouterLlmService(LlmService):
             content=cleaned_content,
             additional_data=additional_data,
         )
+
+    def _find_safe_content_end(self, buffer: str, tag_prefix: str) -> int:
+        """
+        Find the safe end position in buffer that doesn't split a tag.
+        Returns the index where we can safely yield content without splitting a tag.
+        """
+        for i in range(1, min(len(tag_prefix) + 1, len(buffer) + 1)):
+            if buffer.endswith(tag_prefix[:i]):
+                return len(buffer) - i
+        return len(buffer)
     
-    # TODO: Check
+    def _process_opening_tag_state(
+        self, 
+        buffer: str, 
+        current_tag_name: str | None, 
+        tag_content: str
+    ) -> tuple[str, bool, str | None, str, list[StreamedChunk]]:
+        """
+        Process buffer when not currently inside a tag.
+        Returns: (remaining_buffer, in_tag, current_tag_name, tag_content, chunks_to_yield)
+        """
+        chunks_to_yield: list[StreamedChunk] = []
+        
+        # Look for complete opening tag
+        match = re.search(r'<additional_data name="([^"]+)">', buffer)
+        if match:
+            # Found complete opening tag
+            before_tag = buffer[:match.start()]
+            if before_tag:
+                chunks_to_yield.append(StreamedChunk(content=before_tag))
+            new_tag_name = match.group(1)
+            remaining_buffer = buffer[match.end():]
+            return remaining_buffer, True, new_tag_name, "", chunks_to_yield
+        
+        # Check if buffer ends with partial opening tag
+        safe_end = self._find_safe_content_end(buffer, '<additional_data')
+        if safe_end > 0:
+            # Yield safe content and keep partial tag in buffer
+            chunks_to_yield.append(StreamedChunk(content=buffer[:safe_end]))
+            return buffer[safe_end:], False, current_tag_name, tag_content, chunks_to_yield
+        
+        # No tag found, yield all content
+        if buffer:
+            chunks_to_yield.append(StreamedChunk(content=buffer))
+        return "", False, current_tag_name, tag_content, chunks_to_yield
+    
+    def _process_closing_tag_state(
+        self, 
+        buffer: str, 
+        current_tag_name: str | None, 
+        tag_content: str
+    ) -> tuple[str, bool, str | None, str, list[StreamedChunk]]:
+        """
+        Process buffer when currently inside a tag.
+        Returns: (remaining_buffer, in_tag, current_tag_name, tag_content, chunks_to_yield)
+        """
+        chunks_to_yield: list[StreamedChunk] = []
+        close_tag = '</additional_data>'
+        close_index = buffer.find(close_tag)
+        
+        if close_index != -1:
+            # Found complete closing tag
+            tag_content += buffer[:close_index]
+            chunks_to_yield.append(StreamedChunk(
+                content=tag_content,
+                additional_data_key=current_tag_name,
+            ))
+            remaining_buffer = buffer[close_index + len(close_tag):]
+            return remaining_buffer, False, None, "", chunks_to_yield
+        
+        # Check if buffer ends with partial closing tag
+        safe_end = self._find_safe_content_end(buffer, '</additional_data')
+        if safe_end > 0:
+            # Add safe content to tag and keep partial closing tag in buffer
+            tag_content += buffer[:safe_end]
+            return buffer[safe_end:], True, current_tag_name, tag_content, chunks_to_yield
+        
+        # No closing tag found, add all content to tag
+        tag_content += buffer
+        return "", True, current_tag_name, tag_content, chunks_to_yield
+
     async def get_completion_streamed(
         self,
         api_key: str,
@@ -126,7 +205,7 @@ class OpenRouterLlmService(LlmService):
         # Buffer for detecting tags
         buffer = ""
         in_tag = False
-        current_tag_name = None
+        current_tag_name: str | None = None
         tag_content = ""
         
         async for chunk in stream:
@@ -136,63 +215,28 @@ class OpenRouterLlmService(LlmService):
             
             buffer += delta
             
-            # Try to detect and parse tags
+            # Process buffer until no more complete tags can be found
             while buffer:
                 if not in_tag:
-                    # Look for opening tag
-                    match = re.search(r'<additional_data name="([^"]+)">', buffer)
-                    if match:
-                        # Yield everything before the tag
-                        before_tag = buffer[:match.start()]
-                        if before_tag:
-                            yield StreamedChunk(content=before_tag)
-                        
-                        current_tag_name = match.group(1)
-                        in_tag = True
-                        tag_content = ""
-                        buffer = buffer[match.end():]
-                    else:
-                        # No opening tag found, but check if we might be building one
-                        if '<additional_data' in buffer[-50:]:  # Keep some buffer
-                            # Yield everything except the potential partial tag
-                            safe_index = buffer.rfind('<additional_data')
-                            if safe_index > 0:
-                                yield StreamedChunk(content=buffer[:safe_index])
-                                buffer = buffer[safe_index:]
-                            break
-                        else:
-                            # Safe to yield everything
-                            if buffer:
-                                yield StreamedChunk(content=buffer)
-                            buffer = ""
-                            break
+                    buffer, in_tag, current_tag_name, tag_content, chunks_to_yield = self._process_opening_tag_state(
+                        buffer, current_tag_name, tag_content
+                    )
+                    # Yield any chunks from processing
+                    for chunk in chunks_to_yield:
+                        yield chunk
+                    # If we have remaining buffer, continue processing
+                    if not buffer:
+                        break
                 else:
-                    # Look for closing tag
-                    close_tag = '</additional_data>'
-                    close_index = buffer.find(close_tag)
-                    if close_index != -1:
-                        # Found closing tag
-                        tag_content += buffer[:close_index]
-                        yield StreamedChunk(
-                            content=tag_content,
-                            additional_data_key=current_tag_name,
-                        )
-                        in_tag = False
-                        current_tag_name = None
-                        tag_content = ""
-                        buffer = buffer[close_index + len(close_tag):]
-                    else:
-                        # Keep accumulating tag content, but check if we might be building closing tag
-                        if '</additional_data' in buffer[-30:]:
-                            safe_index = buffer.rfind('</additional_data')
-                            tag_content += buffer[:safe_index]
-                            buffer = buffer[safe_index:]
-                            break
-                        else:
-                            # Safe to add to tag content
-                            tag_content += buffer
-                            buffer = ""
-                            break
+                    buffer, in_tag, current_tag_name, tag_content, chunks_to_yield = self._process_closing_tag_state(
+                        buffer, current_tag_name, tag_content
+                    )
+                    # Yield any chunks from processing
+                    for chunk in chunks_to_yield:
+                        yield chunk
+                    # If we have remaining buffer, continue processing
+                    if not buffer:
+                        break
         
         # Yield any remaining buffer
         if buffer:
