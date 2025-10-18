@@ -2,6 +2,7 @@ import sqlite3
 from typing import Any
 
 
+# TODO: Move table creation to `..._repo` classes
 class Database:
     """SQLite database connection manager"""
     
@@ -45,6 +46,7 @@ class Database:
                     thread_id TEXT NOT NULL,
                     role TEXT NOT NULL,
                     content TEXT NOT NULL,
+                    additional_data TEXT,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY (thread_id) REFERENCES chat_threads(id)
                 )
@@ -64,14 +66,6 @@ class Database:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_users_api_key 
                 ON users(api_key)
-            """)
-            
-            # Insert test users if they don't exist
-            cursor.execute("""
-                INSERT OR IGNORE INTO users (id, api_key, created_at)
-                VALUES 
-                    ('user-1', 'test-api-key-1', datetime('now')),
-                    ('user-2', 'test-api-key-2', datetime('now'))
             """)
             
             conn.commit()

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, status
+from fastapi.params import Query
 
 from app.api.dependencies import LLMServiceDep, AuthServiceDep
 from app.models.model.responses import ModelsListResponse, ModelDescriptionResponse
@@ -14,13 +15,14 @@ async def list_models(
     request: Request,
     llm_service: LLMServiceDep,
     auth_service: AuthServiceDep,
+    provider: str | None = Query(None, description="Filter models by provider"),
 ) -> ModelsListResponse:
     """
     Get a list of available LLM models with their descriptions and pricing.
     """
     auth_service.authenticate(request, require_openrouter_key=False)
     
-    models = await llm_service.get_models()
+    models = await llm_service.get_models(provider=provider)
     
     return ModelsListResponse(
         models=[
@@ -35,4 +37,3 @@ async def list_models(
             for model in models
         ]
     )
-

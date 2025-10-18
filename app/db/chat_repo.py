@@ -178,7 +178,7 @@ class ChatRepo:
                 role=row["role"],
                 content=row["content"],
                 created_at=datetime.fromisoformat(row["created_at"]),
-                additional_data=json.loads(row["additional_data"]) if row["additional_data"] else None,
+                additional_data=json.loads(row["additional_data"]) if row["additional_data"] else {},
             )
             for row in rows
         ]

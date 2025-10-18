@@ -1,0 +1,9 @@
+{
+    "model": "google/gemini-2.5-flash-lite",
+    "prompt": "What's the best Python API framework to use for a LLM-based project? Please consider what features are important for that kind of project.",
+    "additional_requested_data": {
+        "title": "Title of the conversation",
+        "best_pick": "Name of the recommended framework",
+        "least_fitting": "Name of the framework that is definitely a wrong choice - leave this unspecified if it's hard to pick one"
+    }
+}

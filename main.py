@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
+from app.api.dependencies import get_user_repo
 from app.api.routes.chat import router as chat_router
 from app.api.routes.completions import router as completions_router
 from app.api.routes.health import router as health_router
@@ -71,6 +72,14 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+# Seed default user
+user_repo = get_user_repo()
+if user_repo.get_user_by_id("default") is None:
+    user_repo.create_user(
+        user_id="default",
+        api_key="default-api-key",
+    )
 
 
 if __name__ == "__main__":

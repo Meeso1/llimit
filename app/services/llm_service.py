@@ -248,7 +248,7 @@ class OpenRouterLlmService(LlmService):
             else:
                 yield StreamedChunk(content=buffer)
     
-    async def get_models(self) -> list[ModelDescription]:
+    async def get_models(self, provider: str | None = None) -> list[ModelDescription]:
         """
         Get list of available models from OpenRouter.
         """        
@@ -259,6 +259,10 @@ class OpenRouterLlmService(LlmService):
         
         models = []
         for model_data in data.get("data", []):
+            model_provider = model_data.get("id", "").split("/")[0] if "/" in model_data.get("id", "") else ""
+            if provider is not None and model_provider != provider:
+                continue
+
             # Extract pricing information
             pricing = model_data.get("pricing", {})
             input_cost = float(pricing.get("prompt", 0))
@@ -271,7 +275,7 @@ class OpenRouterLlmService(LlmService):
             models.append(ModelDescription(
                 name=model_data.get("id", ""),
                 description=model_data.get("description", ""),
-                provider=model_data.get("name", "").split("/")[0] if "/" in model_data.get("name", "") else "",
+                provider=model_provider,
                 context_length=model_data.get("context_length", 0),
                 input_cost_per_million=input_cost_per_million,
                 output_cost_per_million=output_cost_per_million,
