@@ -1,6 +1,25 @@
 from datetime import datetime, timezone
-from app.db.database import Database
+from app.db.database import Database, register_schema_sql
 from app.models.user import User
+
+
+@register_schema_sql
+def _create_users_table() -> str:
+    return """
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            api_key TEXT UNIQUE NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """
+
+
+@register_schema_sql
+def _create_users_index() -> str:
+    return """
+        CREATE INDEX IF NOT EXISTS idx_users_api_key 
+        ON users(api_key)
+    """
 
 
 class UserRepo:

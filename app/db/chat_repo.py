@@ -1,8 +1,56 @@
 from datetime import datetime, timezone
 import json
 
-from app.db.database import Database
+from app.db.database import Database, register_schema_sql
 from app.models.chat.models import ChatThread, ChatMessage
+
+
+@register_schema_sql
+def _create_chat_threads_table() -> str:
+    return """
+        CREATE TABLE IF NOT EXISTS chat_threads (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            title TEXT,
+            description TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            deleted_at TEXT,
+            model_name TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """
+
+
+@register_schema_sql
+def _create_chat_messages_table() -> str:
+    return """
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id TEXT PRIMARY KEY,
+            thread_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            additional_data TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (thread_id) REFERENCES chat_threads(id)
+        )
+    """
+
+
+@register_schema_sql
+def _create_chat_threads_index() -> str:
+    return """
+        CREATE INDEX IF NOT EXISTS idx_chat_threads_user_id 
+        ON chat_threads(user_id)
+    """
+
+
+@register_schema_sql
+def _create_chat_messages_index() -> str:
+    return """
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_thread_id 
+        ON chat_messages(thread_id)
+    """
 
 
 class ChatRepo:

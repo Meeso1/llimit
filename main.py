@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
-from app.api.dependencies import get_user_repo
+from app.api.dependencies import get_database, get_user_repo
 from app.api.routes.chat import router as chat_router
 from app.api.routes.completions import router as completions_router
 from app.api.routes.health import router as health_router
@@ -70,6 +70,10 @@ def create_app() -> FastAPI:
     
     return app
 
+
+# Initialize database schema before creating app
+database = get_database()
+database.initialize_schema()
 
 app = create_app()
 

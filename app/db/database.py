@@ -1,74 +1,64 @@
 import sqlite3
-from typing import Any
+from typing import Any, Callable
 
 
-# TODO: Move table creation to `..._repo` classes
+class DatabaseNotInitializedError(Exception):
+    """Raised when database operations are attempted before initialization"""
+    pass
+
+
+def register_schema_sql(func: Callable[[], str]) -> Callable[[], str]:
+    """Decorator to register SQL returned by a function for schema initialization
+    
+    This decorator should be used on functions that return SQL statements
+    for table creation, indexes, etc. The function is called immediately
+    and its return value is registered for execution during database initialization.
+    
+    Example:
+        @register_schema_sql
+        def _create_users_table() -> str:
+            return "CREATE TABLE IF NOT EXISTS users (...)"
+    """
+    sql = func()
+    Database._schema_registry.append(sql)
+    return func
+
+
 class Database:
-    """SQLite database connection manager"""
+    """SQLite database connection manager with schema registration"""
+    
+    # Class-level registry for schema initialization SQL
+    _schema_registry: list[str] = []
     
     def __init__(self, db_path: str = "data/llimit.db") -> None:
         self.db_path = db_path
-        self._init_db()
+        self._initialized = False
     
-    def _init_db(self) -> None:
-        """Initialize database schema"""
+    def initialize_schema(self) -> None:
+        """Initialize database schema by executing all registered SQL
+        
+        This must be called before using the database. It executes all
+        SQL statements that have been registered via register_schema().
+        """
+        if self._initialized:
+            return
+        
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
-            # Users table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id TEXT PRIMARY KEY,
-                    api_key TEXT UNIQUE NOT NULL,
-                    created_at TEXT NOT NULL
-                )
-            """)
-            
-            # Chat threads table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS chat_threads (
-                    id TEXT PRIMARY KEY,
-                    user_id TEXT NOT NULL,
-                    title TEXT,
-                    description TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    deleted_at TEXT,
-                    model_name TEXT NOT NULL,
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                )
-            """)
-            
-            # Chat messages table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS chat_messages (
-                    id TEXT PRIMARY KEY,
-                    thread_id TEXT NOT NULL,
-                    role TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    additional_data TEXT,
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY (thread_id) REFERENCES chat_threads(id)
-                )
-            """)
-            
-            # Create indexes
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_chat_threads_user_id 
-                ON chat_threads(user_id)
-            """)
-            
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_chat_messages_thread_id 
-                ON chat_messages(thread_id)
-            """)
-            
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_users_api_key 
-                ON users(api_key)
-            """)
+            for sql in self._schema_registry:
+                cursor.execute(sql)
             
             conn.commit()
+        
+        self._initialized = True
+    
+    def _check_initialized(self) -> None:
+        """Check if database has been initialized, raise error if not"""
+        if not self._initialized:
+            raise DatabaseNotInitializedError(
+                "Database has not been initialized. Call initialize_schema() first."
+            )
     
     def get_connection(self) -> sqlite3.Connection:
         """Get a database connection"""
@@ -78,6 +68,7 @@ class Database:
     
     def execute_query(self, query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
         """Execute a SELECT query and return results"""
+        self._check_initialized()
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(query, params)
@@ -85,6 +76,7 @@ class Database:
     
     def execute_update(self, query: str, params: tuple[Any, ...] = ()) -> int:
         """Execute an INSERT/UPDATE/DELETE query and return affected rows"""
+        self._check_initialized()
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(query, params)
