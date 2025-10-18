@@ -1,45 +1,85 @@
 import asyncio
 from collections import defaultdict
+from typing import Any
 from uuid import uuid4
 
 from app.events.sse_event import SseEvent
 
 
-class SseConnection:
-    """Represents a single SSE connection"""
+class EventFilter:
+    def __init__(
+        self,
+        event_types: list[str] | None = None,
+        metadata_filters: dict[str, list[Any]] | None = None,
+    ) -> None:
+        """
+        Initialize event filter.
+        
+        Args:
+            event_types: List of allowed event types, None means all types
+            metadata_filters: Dict of metadata key -> list of allowed values
+                             e.g. {"thread_id": ["id1", "id2"]}
+                             None or empty list for a key means all values allowed
+        """
+        self.event_types = event_types
+        self.metadata_filters = metadata_filters or {}
     
-    def __init__(self, user_id: str) -> None:
+    def matches(self, event: SseEvent) -> bool:
+        if self.event_types is not None and event.event_type not in self.event_types:
+            return False
+        
+        for key, allowed_values in self.metadata_filters.items():
+            if allowed_values:  # Only filter if list is not empty
+                event_value = event.metadata.get(key)
+                if event_value is not None and event_value not in allowed_values:
+                    return False
+        
+        return True
+
+
+class SseConnection:
+    def __init__(self, user_id: str, event_filter: EventFilter | None = None) -> None:
         self.user_id = user_id
         self.queue: asyncio.Queue[SseEvent] = asyncio.Queue()
         self.connection_id = str(uuid4())
+        self.filter = event_filter or EventFilter()
     
     async def send(self, event: SseEvent) -> None:
-        """Send an event to this connection"""
-        await self.queue.put(event)
+        if self.filter.matches(event):
+            await self.queue.put(event)
     
     async def receive(self) -> SseEvent:
-        """Receive the next event"""
         return await self.queue.get()
 
 
 class SseService:
-    """Service for managing SSE connections and emitting events"""
-    
     def __init__(self) -> None:
         # Map of user_id -> list of active connections
         self._connections: dict[str, list[SseConnection]] = defaultdict(list)
-        self._lock = asyncio.Lock()
+        self._user_locks: dict[str, asyncio.Lock] = {}
+        self._locks_lock = asyncio.Lock()  # Lock for creating per-user locks
     
-    async def register_connection(self, user_id: str) -> SseConnection:
-        """Register a new SSE connection for a user"""
-        connection = SseConnection(user_id)
-        async with self._lock:
+    async def _get_user_lock(self, user_id: str) -> asyncio.Lock:
+        async with self._locks_lock:
+            if user_id not in self._user_locks:
+                self._user_locks[user_id] = asyncio.Lock()
+            return self._user_locks[user_id]
+    
+    async def register_connection(
+        self,
+        user_id: str,
+        event_filter: EventFilter | None = None,
+    ) -> SseConnection:
+        connection = SseConnection(user_id, event_filter)
+        user_lock = await self._get_user_lock(user_id)
+        async with user_lock:
             self._connections[user_id].append(connection)
         return connection
     
     async def unregister_connection(self, connection: SseConnection) -> None:
         """Unregister an SSE connection"""
-        async with self._lock:
+        user_lock = await self._get_user_lock(connection.user_id)
+        async with user_lock:
             if connection.user_id in self._connections:
                 self._connections[connection.user_id] = [
                     conn for conn in self._connections[connection.user_id]
@@ -48,23 +88,18 @@ class SseService:
                 # Clean up empty lists
                 if not self._connections[connection.user_id]:
                     del self._connections[connection.user_id]
+                    # Clean up the lock as well
+                    async with self._locks_lock:
+                        if connection.user_id in self._user_locks:
+                            del self._user_locks[connection.user_id]
     
     async def emit_event(
         self,
         user_id: str,
         event: SseEvent,
     ) -> None:
-        """
-        Emit an event to all connections for a specific user.
-        
-        Args:
-            user_id: The user to send the event to
-            event_type: The type of event (e.g., "message.created", "chunk.received")
-            content: The content/payload of the event
-            metadata: Optional metadata (e.g., {"thread_id": "...", "message_id": "..."})
-        """
-        
-        async with self._lock:
+        user_lock = await self._get_user_lock(user_id)
+        async with user_lock:
             connections = self._connections.get(user_id, [])
             for connection in connections:
                 try:
