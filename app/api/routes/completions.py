@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, status
 
-from app.api.dependencies import LLMServiceDep, AuthServiceDep
+from app.api.dependencies import LLMServiceDep, AuthContextDep
 from app.models.completion.requests import CompletionRequest
 from app.models.completion.responses import CompletionResponse
 from app.services.llm_service_base import LlmMessage
@@ -14,15 +14,13 @@ router = APIRouter(
 @router.post("", response_model=CompletionResponse, status_code=status.HTTP_200_OK)
 async def create_completion(
     request_body: CompletionRequest,
-    request: Request,
+    context: AuthContextDep(require_openrouter_key=True),
     llm_service: LLMServiceDep,
-    auth_service: AuthServiceDep,
 ) -> CompletionResponse:
     """
     Get a completion from the LLM without saving it to any conversation history.
     This is a machine-friendly endpoint for direct LLM interactions.
     """
-    context = auth_service.authenticate(request, require_openrouter_key=True)
     
     messages: list[LlmMessage] = []
     if request_body.messages:

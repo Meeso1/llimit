@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, status
 from fastapi.params import Query
 
-from app.api.dependencies import LLMServiceDep, AuthServiceDep
+from app.api.dependencies import LLMServiceDep, AuthContextDep
 from app.models.model.responses import ModelsListResponse, ModelDescriptionResponse
 
 router = APIRouter(
@@ -12,16 +12,13 @@ router = APIRouter(
 
 @router.get("", response_model=ModelsListResponse, status_code=status.HTTP_200_OK)
 async def list_models(
-    request: Request,
+    context: AuthContextDep(require_openrouter_key=False),
     llm_service: LLMServiceDep,
-    auth_service: AuthServiceDep,
     provider: str | None = Query(None, description="Filter models by provider"),
 ) -> ModelsListResponse:
     """
     Get a list of available LLM models with their descriptions and pricing.
     """
-    auth_service.authenticate(request, require_openrouter_key=False)
-    
     models = await llm_service.get_models(provider=provider)
     
     return ModelsListResponse(

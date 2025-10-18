@@ -1,7 +1,8 @@
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 
+from app.core.context import RequestContext
 from app.db.chat_repo import ChatRepo
 from app.db.database import Database
 from app.db.user_repo import UserRepo
@@ -44,6 +45,21 @@ def get_auth_service() -> AuthService:
     return _auth_service_instance
 
 
+def get_auth_context(require_openrouter_key: bool = True):
+    """
+    Authenticate request and return context.
+    Requires X-API-Key header and optionally X-OpenRouter-API-Key header.
+    """
+    
+    def _get_auth_context_inner(
+        request: Request, 
+        auth_service: Annotated[AuthService, Depends(get_auth_service)],
+    ) -> RequestContext:
+        return auth_service.authenticate(request, require_openrouter_key=require_openrouter_key)
+    
+    return _get_auth_context_inner
+
+
 def get_chat_service(
     llm_service: Annotated[LlmService, Depends(get_llm_service)],
     chat_repo: Annotated[ChatRepo, Depends(get_chat_repo)],
@@ -56,3 +72,7 @@ def get_chat_service(
 ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
 LLMServiceDep = Annotated[LlmService, Depends(get_llm_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def AuthContextDep(require_openrouter_key: bool = True):
+    return Annotated[RequestContext, Depends(get_auth_context(require_openrouter_key))]
