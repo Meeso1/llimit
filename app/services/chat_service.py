@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.db.chat_repo import ChatRepo
+from app.events.new_llm_message import new_llm_message
 from app.models.chat.requests import (
     CreateChatThreadRequest,
     SendMessageRequest,
@@ -13,12 +14,15 @@ from app.models.chat.models import (
     ChatMessage,
 )
 from app.services.llm_service import LlmMessage, LlmService
+from app.services.sse_service import SseService
+from app.events.thread_created import thread_created
 
 
 class ChatService:
-    def __init__(self, llm_service: LlmService, chat_repo: ChatRepo) -> None:
+    def __init__(self, llm_service: LlmService, chat_repo: ChatRepo, sse_service: SseService) -> None:
         self._llm_service = llm_service
         self._chat_repo = chat_repo
+        self._sse_service = sse_service
     
     async def create_thread(self, user_id: str, request: CreateChatThreadRequest) -> ChatThread:
         thread_id = str(uuid4())
@@ -32,6 +36,10 @@ class ChatService:
             model_name=request.model_name,
             created_at=now,
         )
+        
+        await self._sse_service.emit_event(
+            user_id=user_id,
+            event=thread_created(thread))
         
         return thread
     
@@ -123,16 +131,26 @@ class ChatService:
             )
             
             # Save assistant response
-            assistant_message_id = str(uuid4())
-            now = datetime.now(timezone.utc)
-            
-            self._chat_repo.add_message(
-                message_id=assistant_message_id,
-                thread_id=thread_id,
+            assistant_message = ChatMessage(
+                id=str(uuid4()),
                 role="assistant",
                 content=response.content,
                 additional_data=response.additional_data,
-                created_at=now,
+                created_at=datetime.now(timezone.utc),
+            )
+            
+            self._chat_repo.add_message(
+                message_id=assistant_message.id,
+                thread_id=thread_id,
+                role=assistant_message.role,
+                content=assistant_message.content,
+                additional_data=assistant_message.additional_data,
+                created_at=assistant_message.created_at,
+            )
+
+            await self._sse_service.emit_event(
+                user_id=user_id,
+                event=new_llm_message(thread.id, assistant_message),
             )
 
             # Update thread metadata if needed

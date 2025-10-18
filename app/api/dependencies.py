@@ -10,6 +10,7 @@ from app.services.auth_service import AuthService
 from app.services.chat_service import ChatService
 from app.services.llm_service_base import LlmService
 from app.services.llm_service import OpenRouterLlmService
+from app.services.sse_service import SseService
 
 # Singleton instances
 _database_instance = Database()
@@ -17,6 +18,7 @@ _user_repo_instance = UserRepo(_database_instance)
 _chat_repo_instance = ChatRepo(_database_instance)
 _llm_service_instance = OpenRouterLlmService()
 _auth_service_instance = AuthService(_user_repo_instance)
+_sse_service_instance = SseService()
 
 
 def get_database() -> Database:
@@ -45,6 +47,11 @@ def get_auth_service() -> AuthService:
     return _auth_service_instance
 
 
+def get_sse_service() -> SseService:
+    """Get the singleton SseService instance"""
+    return _sse_service_instance
+
+
 def get_auth_context(require_openrouter_key: bool = True):
     """
     Authenticate request and return context.
@@ -63,15 +70,17 @@ def get_auth_context(require_openrouter_key: bool = True):
 def get_chat_service(
     llm_service: Annotated[LlmService, Depends(get_llm_service)],
     chat_repo: Annotated[ChatRepo, Depends(get_chat_repo)],
+    sse_service: Annotated[SseService, Depends(get_sse_service)],
 ) -> ChatService:
     """Get ChatService instance"""
-    return ChatService(llm_service=llm_service, chat_repo=chat_repo)
+    return ChatService(llm_service=llm_service, chat_repo=chat_repo, sse_service=sse_service)
 
 
 # Type annotations for dependencies
 ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
 LLMServiceDep = Annotated[LlmService, Depends(get_llm_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+SseServiceDep = Annotated[SseService, Depends(get_sse_service)]
 
 
 def AuthContextDep(require_openrouter_key: bool = True):
