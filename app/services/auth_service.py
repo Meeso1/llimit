@@ -1,14 +1,14 @@
 from fastapi import HTTPException, status, Request
 
 from app.core.context import RequestContext
-from app.db.user_repo import UserRepo
+from app.services.api_key_service import ApiKeyService
 
 
 class AuthService:
     """Service for handling authentication and creating request contexts"""
     
-    def __init__(self, user_repo: UserRepo):
-        self.user_repo = user_repo
+    def __init__(self, api_key_service: ApiKeyService):
+        self.api_key_service = api_key_service
     
     def authenticate(
         self,
@@ -37,11 +37,11 @@ class AuthService:
             )
         
         # Validate API key and get user
-        user = self.user_repo.get_user_by_api_key(api_key)
-        if user is None:
+        validated_key, error = self.api_key_service.validate_api_key(api_key)
+        if validated_key is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid API key",
+                detail=error or "Invalid API key",
             )
         
         # Get OpenRouter API key if required
@@ -55,7 +55,7 @@ class AuthService:
                 )
         
         return RequestContext(
-            user_id=user.id,
+            user_id=validated_key.user_id,
             openrouter_api_key=openrouter_api_key or "",
         )
 

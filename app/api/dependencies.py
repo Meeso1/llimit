@@ -3,9 +3,11 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from app.core.context import RequestContext
+from app.db.api_key_repo import ApiKeyRepo
 from app.db.chat_repo import ChatRepo
 from app.db.database import Database
 from app.db.user_repo import UserRepo
+from app.services.api_key_service import ApiKeyService
 from app.services.auth_service import AuthService
 from app.services.chat_service import ChatService
 from app.services.completion_stream_service import CompletionStreamService
@@ -16,9 +18,11 @@ from app.services.sse_service import SseService
 # Singleton instances
 _database_instance = Database()
 _user_repo_instance = UserRepo(_database_instance)
+_api_key_repo_instance = ApiKeyRepo(_database_instance)
 _chat_repo_instance = ChatRepo(_database_instance)
 _llm_service_instance = OpenRouterLlmService()
-_auth_service_instance = AuthService(_user_repo_instance)
+_api_key_service_instance = ApiKeyService(_api_key_repo_instance)
+_auth_service_instance = AuthService(_api_key_service_instance)
 _sse_service_instance = SseService()
 
 
@@ -36,6 +40,15 @@ def get_chat_repo() -> ChatRepo:
     """Get the singleton ChatRepo instance"""
     return _chat_repo_instance
 
+
+def get_api_key_repo() -> ApiKeyRepo:
+    """Get the singleton ApiKeyRepo instance"""
+    return _api_key_repo_instance
+
+
+def get_api_key_service() -> ApiKeyService:
+    """Get the singleton ApiKeyService instance"""
+    return _api_key_service_instance
 
 
 def get_llm_service() -> LlmService:

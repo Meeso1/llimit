@@ -2,7 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
-from app.api.dependencies import get_database, get_user_repo
+from app.api.dependencies import get_database, get_user_repo, get_api_key_service
+from app.api.routes.api_keys import router as api_keys_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.completions import router as completions_router
 from app.api.routes.health import router as health_router
@@ -66,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(completions_router)
     app.include_router(models_router)
     app.include_router(sse_router)
+    app.include_router(api_keys_router)
     
     # Set custom OpenAPI schema
     app.openapi = lambda: custom_openapi(app)
@@ -79,13 +81,22 @@ database.initialize_schema()
 
 app = create_app()
 
-# Seed default user
+# Seed default user with API key
 user_repo = get_user_repo()
+api_key_service = get_api_key_service()
+
+# Check if default user exists
 if user_repo.get_user_by_id("default") is None:
-    user_repo.create_user(
+    user_repo.create_user("default")
+    
+    # Create default API key for the user
+    result = api_key_service.create_api_key(
         user_id="default",
-        api_key="default-api-key",
+        name="Default API Key",
     )
+    
+    print(f"Default user created with API key: {result.plaintext_key}")
+    print("Save this key securely - it won't be shown again!")
 
 
 if __name__ == "__main__":
