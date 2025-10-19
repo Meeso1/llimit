@@ -38,12 +38,12 @@ class OpenRouterLlmService(LlmService):
         """Extract additional data tags from content and return cleaned content + data dict"""
         additional_data: dict[str, str] = {}
         
-        # Find all additional_data tags
-        pattern = r'<additional_data name="([^"]+)">(.+?)</additional_data>'
+        # Find all additional_data tags (format: <additional_data key=NAME>VALUE</additional_data>)
+        pattern = r'<additional_data key=([^>]+)>(.+?)</additional_data>'
         matches = re.findall(pattern, content, re.DOTALL)
         
         for key, value in matches:
-            additional_data[key] = value.strip()
+            additional_data[key.strip()] = value.strip()
         
         # Remove tags from content
         cleaned_content = re.sub(pattern, '', content, flags=re.DOTALL).strip()
@@ -117,14 +117,14 @@ class OpenRouterLlmService(LlmService):
         """
         chunks_to_yield: list[StreamedChunk] = []
         
-        # Look for complete opening tag
-        match = re.search(r'<additional_data name="([^"]+)">', buffer)
+        # Look for complete opening tag (format: <additional_data key=NAME>)
+        match = re.search(r'<additional_data key=([^>]+)>', buffer)
         if match:
             # Found complete opening tag
             before_tag = buffer[:match.start()]
             if before_tag:
                 chunks_to_yield.append(StreamedChunk(content=before_tag))
-            new_tag_name = match.group(1)
+            new_tag_name = match.group(1).strip()
             remaining_buffer = buffer[match.end():]
             return remaining_buffer, True, new_tag_name, "", chunks_to_yield
         
