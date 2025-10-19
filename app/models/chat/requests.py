@@ -9,6 +9,7 @@ class CreateChatThreadRequest(BaseModel):
 
 class SendMessageRequest(BaseModel):
     content: str = Field(..., min_length=1, description="Message content")
+    stream: bool = Field(False, description="Whether to stream the response")
 
 
 class UpdateThreadRequest(BaseModel):

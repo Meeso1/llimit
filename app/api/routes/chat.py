@@ -84,7 +84,8 @@ async def send_message(
         thread_id, 
         context.user_id, 
         request_body, 
-        api_key=context.openrouter_api_key
+        api_key=context.openrouter_api_key,
+        stream=request_body.stream,
     )
     if new_message_id is None:
         raise HTTPException(

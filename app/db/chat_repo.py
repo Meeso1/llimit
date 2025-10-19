@@ -187,7 +187,7 @@ class ChatRepo:
         content: str,
         created_at: datetime,
         additional_data: dict[str, str] | None = None,
-    ) -> None:
+    ) -> ChatMessage:
         """Add a message to a thread"""
         self.db.execute_update(
             """
@@ -201,6 +201,14 @@ class ChatRepo:
         self.db.execute_update(
             "UPDATE chat_threads SET updated_at = ? WHERE id = ?",
             (created_at.isoformat(), thread_id),
+        )
+        
+        return ChatMessage(
+            id=message_id,
+            role=role,
+            content=content,
+            created_at=created_at,
+            additional_data=additional_data,
         )
     
     def get_messages(self, thread_id: str, user_id: str) -> list[ChatMessage] | None:
