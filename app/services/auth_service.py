@@ -56,6 +56,7 @@ class AuthService:
         
         return RequestContext(
             user_id=validated_key.user_id,
+            api_key_id=validated_key.id,
             openrouter_api_key=openrouter_api_key or "",
         )
 

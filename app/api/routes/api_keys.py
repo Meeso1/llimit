@@ -84,7 +84,14 @@ async def delete_api_key(
     
     Note: You cannot delete the API key that is currently being used for authentication.
     """
-    # Get the API key to verify ownership and prevent self-deletion
+    # Prevent deleting the key being used for authentication
+    if key_id == context.api_key_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Cannot delete the API key currently being used for authentication",
+        )
+    
+    # Get the API key to verify ownership
     api_key = api_key_service.get_api_key_by_id(key_id)
     
     if not api_key:
