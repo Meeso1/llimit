@@ -8,6 +8,7 @@ from app.db.database import Database
 from app.db.user_repo import UserRepo
 from app.services.auth_service import AuthService
 from app.services.chat_service import ChatService
+from app.services.completion_stream_service import CompletionStreamService
 from app.services.llm_service_base import LlmService
 from app.services.llm_service import OpenRouterLlmService
 from app.services.sse_service import SseService
@@ -76,8 +77,16 @@ def get_chat_service(
     return ChatService(llm_service=llm_service, chat_repo=chat_repo, sse_service=sse_service)
 
 
+def get_completion_stream_service(
+    llm_service: Annotated[LlmService, Depends(get_llm_service)],
+) -> CompletionStreamService:
+    """Get CompletionStreamService instance"""
+    return CompletionStreamService(llm_service=llm_service)
+
+
 # Type annotations for dependencies
 ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
+CompletionStreamServiceDep = Annotated[CompletionStreamService, Depends(get_completion_stream_service)]
 LLMServiceDep = Annotated[LlmService, Depends(get_llm_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 SseServiceDep = Annotated[SseService, Depends(get_sse_service)]
