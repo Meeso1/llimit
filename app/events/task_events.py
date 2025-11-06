@@ -15,7 +15,6 @@ def create_task_steps_generated_event(task: Task, steps: list[TaskStep]) -> SseE
         },
         metadata={
             "task_id": task.id,
-            "user_id": task.user_id,
         },
         event_id=str(uuid4()),
     )
@@ -33,7 +32,6 @@ def create_task_step_completed_event(task: Task, step: TaskStep) -> SseEvent:
         },
         metadata={
             "task_id": task.id,
-            "user_id": task.user_id,
             "step_id": step.id,
         },
         event_id=str(uuid4()),
@@ -51,7 +49,6 @@ def create_task_completed_event(task: Task) -> SseEvent:
         },
         metadata={
             "task_id": task.id,
-            "user_id": task.user_id,
         },
         event_id=str(uuid4()),
     )
@@ -68,7 +65,6 @@ def create_task_failed_event(task: Task, error: str) -> SseEvent:
         },
         metadata={
             "task_id": task.id,
-            "user_id": task.user_id,
         },
         event_id=str(uuid4()),
     )

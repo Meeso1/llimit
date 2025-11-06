@@ -1,53 +1,17 @@
-from fastapi import APIRouter, HTTPException, status, Depends
-from typing import Annotated
+from fastapi import APIRouter, HTTPException, status
 
-from app.api.dependencies import (
-    AuthContextDep,
-    get_database,
-    get_llm_service,
-    get_sse_service,
-)
-from app.db.database import Database
-from app.db.task_repo import TaskRepo
+from app.api.dependencies import AuthContextDep, TaskServiceDep
 from app.models.task.requests import CreateTaskRequest
 from app.models.task.responses import (
     TaskResponse,
     TaskListResponse,
     TaskStepListResponse,
 )
-from app.services.llm_service_base import LlmService
-from app.services.sse_service import SseService
-from app.services.task_decomposition_service import TaskDecompositionService
-from app.services.task_model_selection_service import TaskModelSelectionService
-from app.services.task_service import TaskService
 
 router = APIRouter(
     prefix="/task",
     tags=["task"],
 )
-
-
-# TODO: Move this
-def get_task_service(
-    database: Annotated[Database, Depends(get_database)],
-    llm_service: Annotated[LlmService, Depends(get_llm_service)],
-    sse_service: Annotated[SseService, Depends(get_sse_service)],
-) -> TaskService:
-    """Dependency to get TaskService instance"""
-    task_repo = TaskRepo(database)
-    decomposition_service = TaskDecompositionService(llm_service)
-    model_selection_service = TaskModelSelectionService()
-    
-    return TaskService(
-        task_repo=task_repo,
-        llm_service=llm_service,
-        sse_service=sse_service,
-        decomposition_service=decomposition_service,
-        model_selection_service=model_selection_service,
-    )
-
-
-TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
 
 
 @router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
