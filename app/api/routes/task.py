@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.api.dependencies import AuthContextDep, TaskServiceDep
+from app.api.dependencies import AuthContextDep, TaskServiceDep, TaskRepoDep
 from app.models.task.requests import CreateTaskRequest
 from app.models.task.responses import (
     TaskResponse,
@@ -37,10 +37,10 @@ async def create_task(
 @router.get("", response_model=TaskListResponse)
 async def list_tasks(
     context: AuthContextDep(require_openrouter_key=False),
-    task_service: TaskServiceDep,
+    task_repo: TaskRepoDep,
 ) -> TaskListResponse:
     """Get all tasks for the current user"""
-    tasks = await task_service.list_tasks(context.user_id)
+    tasks = task_repo.list_tasks_by_user(context.user_id)
     return TaskListResponse(
         tasks=[task.to_response() for task in tasks],
     )
@@ -50,7 +50,7 @@ async def list_tasks(
 async def get_task(
     task_id: str,
     context: AuthContextDep(require_openrouter_key=False),
-    task_service: TaskServiceDep,
+    task_repo: TaskRepoDep,
 ) -> TaskResponse:
     """
     Get a specific task by ID.
@@ -61,7 +61,7 @@ async def get_task(
     - Creation and completion times
     - Whether steps have been generated
     """
-    task = await task_service.get_task(task_id, context.user_id)
+    task = task_repo.get_task_by_id(task_id, context.user_id)
     if task is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -74,7 +74,7 @@ async def get_task(
 async def get_task_steps(
     task_id: str,
     context: AuthContextDep(require_openrouter_key=False),
-    task_service: TaskServiceDep,
+    task_repo: TaskRepoDep,
 ) -> TaskStepListResponse:
     """
     Get all steps for a specific task.
@@ -87,7 +87,7 @@ async def get_task_steps(
     - Start and completion times
     - Dependencies on other steps
     """
-    steps = await task_service.get_task_steps(task_id, context.user_id)
+    steps = task_repo.get_steps_by_task_id(task_id, context.user_id)
     if steps is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

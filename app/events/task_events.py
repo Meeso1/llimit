@@ -54,7 +54,6 @@ def create_task_completed_event(task: Task) -> SseEvent:
     )
 
 
-# TODO: Is this needed? Maybe there should be some other way of handling unexpected task results?
 def create_task_failed_event(task: Task, error: str) -> SseEvent:
     """Create an SSE event when a task fails"""
     return SseEvent(

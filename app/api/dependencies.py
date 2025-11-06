@@ -134,6 +134,7 @@ def get_auth_context(require_openrouter_key: bool = True):
 ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
 CompletionStreamServiceDep = Annotated[CompletionStreamService, Depends(get_completion_stream_service)]
 TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
+TaskRepoDep = Annotated[TaskRepo, Depends(get_task_repo)]
 LLMServiceDep = Annotated[LlmService, Depends(get_llm_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 SseServiceDep = Annotated[SseService, Depends(get_sse_service)]

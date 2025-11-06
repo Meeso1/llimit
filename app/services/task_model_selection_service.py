@@ -68,8 +68,16 @@ class TaskModelSelectionService:
         # 3. Balance performance vs cost
         # 4. Consider model strengths (e.g., Claude for writing, GPT-4 for reasoning)
         
-        # For now, return a default model
-        return "openai/gpt-4o-mini"
+        # Temporary hardcoded implementation for testing
+        # Simple keyword-based selection
+        prompt_lower = step_prompt.lower()
+        
+        if "analyze" in prompt_lower or "analysis" in prompt_lower:
+            return "openai/gpt-4o"  # Use smarter model for analysis
+        elif "plan" in prompt_lower or "planning" in prompt_lower:
+            return "anthropic/claude-3.5-sonnet"  # Claude for planning
+        else:
+            return "openai/gpt-4o-mini"  # Default cheaper model
     
     def analyze_step_requirements(self, step_prompt: str) -> StepRequirements:
         """

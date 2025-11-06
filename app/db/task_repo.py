@@ -100,7 +100,7 @@ class TaskRepo:
             steps_generated=False,
         )
     
-    def get_task_by_id_and_user(self, task_id: str, user_id: str) -> Task | None:
+    def get_task_by_id(self, task_id: str, user_id: str) -> Task | None:
         """Get a task by ID for a specific user"""
         rows = self.db.execute_query(
             """
@@ -222,8 +222,16 @@ class TaskRepo:
             additional_context=additional_context,
         )
     
-    def get_steps_by_task_id(self, task_id: str) -> list[TaskStep]:
-        """Get all steps for a task"""
+    def get_steps_by_task_id(self, task_id: str, user_id: str) -> list[TaskStep] | None:
+        """
+        Get all steps for a task if it belongs to the user.
+        Returns None if task doesn't exist or doesn't belong to user.
+        Returns empty list if task exists but has no steps yet.
+        """
+        task = self.get_task_by_id(task_id, user_id)
+        if not task:
+            return None
+        
         rows = self.db.execute_query(
             """
             SELECT id, task_id, step_number, prompt, status, model_name, 

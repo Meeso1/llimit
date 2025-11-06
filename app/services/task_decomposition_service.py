@@ -50,8 +50,6 @@ class TaskDecompositionService:
             TaskDecompositionResult with title and list of step definitions
         """
         # TODO: Implement actual decomposition logic
-        # For now, return a simple single-step breakdown
-        
         # The decomposition should:
         # 1. Analyze the prompt complexity
         # 2. Identify distinct subtasks
@@ -73,16 +71,30 @@ class TaskDecompositionService:
         #     },
         # )
         
-        # For now, simple stub implementation
+        # Temporary hardcoded implementation for testing
+        title = user_prompt[:50] + ("..." if len(user_prompt) > 50 else "")
+        
         return TaskDecompositionResult(
-            title=f"Task: {user_prompt[:50]}...",
+            title=title,
             steps=[
                 TaskStepDefinition(
                     step_number=1,
-                    prompt=user_prompt,
+                    prompt=f"Step 1: Analyze the following request: {user_prompt}",
                     depends_on_steps=[],
-                    additional_context=None,
-                )
+                    additional_context={"step_type": "analysis"},
+                ),
+                TaskStepDefinition(
+                    step_number=2,
+                    prompt=f"Step 2: Create a detailed plan based on the analysis",
+                    depends_on_steps=[1],
+                    additional_context={"step_type": "planning"},
+                ),
+                TaskStepDefinition(
+                    step_number=3,
+                    prompt=f"Step 3: Execute the plan and provide final results",
+                    depends_on_steps=[1, 2],
+                    additional_context={"step_type": "execution"},
+                ),
             ],
         )
     
