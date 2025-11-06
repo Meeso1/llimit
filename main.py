@@ -9,6 +9,7 @@ from app.api.routes.completions import router as completions_router
 from app.api.routes.health import router as health_router
 from app.api.routes.models import router as models_router
 from app.api.routes.sse import router as sse_router
+from app.api.routes.task import router as task_router
 from app.core.config import settings
 
 
@@ -67,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(completions_router)
     app.include_router(models_router)
     app.include_router(sse_router)
+    app.include_router(task_router)
     app.include_router(api_keys_router)
     
     # Set custom OpenAPI schema
