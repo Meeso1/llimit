@@ -39,10 +39,6 @@ class TaskStep:
     response_content: str | None
     started_at: datetime | None
     completed_at: datetime | None
-    # Additional data for step dependencies and context
-    depends_on_steps: list[int]  # List of step numbers this step depends on
-    # TODO: Is that needed? Maybe we should have some other way to handle dependencies?
-    additional_context: dict[str, str] | None  # Extra context for this step
 
     def to_response(self) -> TaskStepResponse:
         return TaskStepResponse(
@@ -55,7 +51,15 @@ class TaskStep:
             response_content=self.response_content,
             started_at=self.started_at,
             completed_at=self.completed_at,
-            depends_on_steps=self.depends_on_steps,
-            additional_context=self.additional_context,
         )
 
+
+@dataclass
+class TaskStepDefinition:
+    prompt: str
+
+
+@dataclass
+class TaskDecompositionResult:
+    title: str
+    steps: list[TaskStepDefinition]

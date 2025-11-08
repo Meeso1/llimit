@@ -1,9 +1,9 @@
-from datetime import datetime, timezone
-import json
+from datetime import datetime
+from uuid import uuid4
 
 from app.db.database import Database, register_schema_sql
 from app.models.task.enums import TaskStatus, StepStatus
-from app.models.task.models import Task, TaskStep
+from app.models.task.models import Task, TaskStep, TaskStepDefinition
 
 
 @register_schema_sql
@@ -36,8 +36,6 @@ def _create_task_steps_table() -> str:
             response_content TEXT,
             started_at TEXT,
             completed_at TEXT,
-            depends_on_steps TEXT,
-            additional_context TEXT,
             FOREIGN KEY (task_id) REFERENCES tasks(id)
         )
     """
@@ -130,104 +128,61 @@ class TaskRepo:
         
         return [self._row_to_task(row) for row in rows]
     
-    def update_task(
+    def update_task_after_steps_generation(
         self,
         task_id: str,
-        title: str | None = None,
-        status: TaskStatus | None = None,
-        completed_at: datetime | None = None,
-        steps_generated: bool | None = None,
+        title: str,
+        steps: list[TaskStepDefinition],
     ) -> Task | None:
-        """Update a task's metadata"""
-        updates = []
-        params = []
-        
-        if title is not None:
-            updates.append("title = ?")
-            params.append(title)
-        
-        if status is not None:
-            updates.append("status = ?")
-            params.append(status.value)
-        
-        if completed_at is not None:
-            updates.append("completed_at = ?")
-            params.append(completed_at.isoformat())
-        
-        if steps_generated is not None:
-            updates.append("steps_generated = ?")
-            params.append(1 if steps_generated else 0)
-        
-        if not updates:
-            # Nothing to update
-            rows = self.db.execute_query(
-                "SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated FROM tasks WHERE id = ?",
-                (task_id,),
-            )
-            return self._row_to_task(rows[0]) if rows else None
-        
-        # Add WHERE clause params
-        params.append(task_id)
-        
         self.db.execute_update(
-            f"UPDATE tasks SET {', '.join(updates)} WHERE id = ?",
-            tuple(params),
+            """
+            UPDATE tasks 
+            SET title = ?, status = ?, steps_generated = ?
+            WHERE id = ?
+            """,
+            (title, TaskStatus.IN_PROGRESS.value, 1, task_id),
         )
         
-        # Return updated task
+        for step_number, step_def in enumerate(steps):
+            self.db.execute_update(
+                """
+                INSERT INTO task_steps 
+                (id, task_id, step_number, prompt, status)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    str(uuid4()),
+                    task_id,
+                    step_number,
+                    step_def.prompt,
+                    StepStatus.PENDING.value
+                ),
+            )
+        
         rows = self.db.execute_query(
             "SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated FROM tasks WHERE id = ?",
             (task_id,),
         )
         return self._row_to_task(rows[0]) if rows else None
     
-    def create_task_step(
+    def update_task_final_status(
         self,
-        step_id: str,
         task_id: str,
-        step_number: int,
-        prompt: str,
-        depends_on_steps: list[int],
-        additional_context: dict[str, str] | None = None,
-    ) -> TaskStep:
-        """Create a new task step"""
+        status: TaskStatus,
+        completed_at: datetime,
+    ) -> Task | None:
         self.db.execute_update(
-            """
-            INSERT INTO task_steps 
-            (id, task_id, step_number, prompt, status, depends_on_steps, additional_context)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                step_id,
-                task_id,
-                step_number,
-                prompt,
-                StepStatus.PENDING.value,
-                json.dumps(depends_on_steps),
-                json.dumps(additional_context) if additional_context else None,
-            ),
+            "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
+            (status.value, completed_at.isoformat(), task_id),
         )
         
-        return TaskStep(
-            id=step_id,
-            task_id=task_id,
-            step_number=step_number,
-            prompt=prompt,
-            status=StepStatus.PENDING,
-            model_name=None,
-            response_content=None,
-            started_at=None,
-            completed_at=None,
-            depends_on_steps=depends_on_steps,
-            additional_context=additional_context,
+        rows = self.db.execute_query(
+            "SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated FROM tasks WHERE id = ?",
+            (task_id,),
         )
+        return self._row_to_task(rows[0]) if rows else None
     
     def get_steps_by_task_id(self, task_id: str, user_id: str) -> list[TaskStep] | None:
-        """
-        Get all steps for a task if it belongs to the user.
-        Returns None if task doesn't exist or doesn't belong to user.
-        Returns empty list if task exists but has no steps yet.
-        """
         task = self.get_task_by_id(task_id, user_id)
         if not task:
             return None
@@ -254,7 +209,6 @@ class TaskRepo:
         started_at: datetime | None = None,
         completed_at: datetime | None = None,
     ) -> TaskStep | None:
-        """Update a task step"""
         updates = []
         params = []
         
@@ -303,7 +257,6 @@ class TaskRepo:
         return self._row_to_task_step(rows[0]) if rows else None
     
     def _row_to_task(self, row: dict) -> Task:
-        """Convert a database row to a Task object"""
         return Task(
             id=row["id"],
             user_id=row["user_id"],
@@ -316,7 +269,6 @@ class TaskRepo:
         )
     
     def _row_to_task_step(self, row: dict) -> TaskStep:
-        """Convert a database row to a TaskStep object"""
         return TaskStep(
             id=row["id"],
             task_id=row["task_id"],
@@ -327,7 +279,5 @@ class TaskRepo:
             response_content=row["response_content"],
             started_at=datetime.fromisoformat(row["started_at"]) if row["started_at"] else None,
             completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
-            depends_on_steps=json.loads(row["depends_on_steps"]) if row["depends_on_steps"] else [],
-            additional_context=json.loads(row["additional_context"]) if row["additional_context"] else None,
         )
 

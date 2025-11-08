@@ -31,18 +31,7 @@ class StepRequirements:
 
 
 # TODO: Complete implementation
-class TaskModelSelectionService:
-    """
-    Service responsible for selecting the appropriate LLM model for each step.
-    
-    This service analyzes step requirements and selects models based on:
-    - Step complexity
-    - Required capabilities (web search, image support, etc.)
-    - Step kind (creative vs analytical vs structured)
-    - Cost considerations
-    - Model performance characteristics
-    """
-    
+class TaskModelSelectionService:    
     def __init__(self) -> None:
         pass
     
@@ -51,16 +40,6 @@ class TaskModelSelectionService:
         step_prompt: str,
         step_requirements: StepRequirements | None = None,
     ) -> str:
-        """
-        Select the most appropriate model for a given step.
-        
-        Args:
-            step_prompt: The prompt for this specific step
-            step_requirements: Optional explicit requirements for this step
-            
-        Returns:
-            Model identifier string (e.g., "openai/gpt-4o")
-        """
         # TODO: Implement intelligent model selection
         # The selection should consider:
         # 1. Parse step_prompt to infer requirements if not provided
@@ -80,15 +59,6 @@ class TaskModelSelectionService:
             return "openai/gpt-4o-mini"  # Default cheaper model
     
     def analyze_step_requirements(self, step_prompt: str) -> StepRequirements:
-        """
-        Analyze a step prompt to determine its requirements.
-        
-        Args:
-            step_prompt: The prompt to analyze
-            
-        Returns:
-            StepRequirements with inferred requirements
-        """
         # TODO: Implement prompt analysis
         # This could use:
         # - Keyword detection (e.g., "search for", "create image", "write code")

@@ -30,14 +30,6 @@ class TaskStepResponse(BaseModel):
     response_content: str | None = Field(None, description="The LLM response for this step")
     started_at: datetime | None
     completed_at: datetime | None
-    depends_on_steps: list[int] = Field(
-        default_factory=list,
-        description="Step numbers this step depends on"
-    )
-    additional_context: dict[str, str] | None = Field(
-        None,
-        description="Additional context provided for this step"
-    )
 
 
 class TaskStepListResponse(BaseModel):
