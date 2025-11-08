@@ -14,6 +14,7 @@ from app.services.chat_service import ChatService
 from app.services.completion_stream_service import CompletionStreamService
 from app.services.llm_service_base import LlmService
 from app.services.llm_service import OpenRouterLlmService
+from app.services.model_cache_service import ModelCacheService
 from app.services.sse_service import SseService
 from app.services.task_decomposition_service import TaskDecompositionService
 from app.services.task_model_selection_service import TaskModelSelectionService
@@ -26,6 +27,7 @@ _api_key_repo_instance = ApiKeyRepo(_database_instance)
 _chat_repo_instance = ChatRepo(_database_instance)
 _task_repo_instance = TaskRepo(_database_instance)
 _llm_service_instance = OpenRouterLlmService()
+_model_cache_service_instance = ModelCacheService(_llm_service_instance)
 _sse_service_instance = SseService()
 _api_key_service_instance = ApiKeyService(_api_key_repo_instance)
 _auth_service_instance = AuthService(_api_key_service_instance)
@@ -78,6 +80,11 @@ def get_api_key_service() -> ApiKeyService:
 def get_llm_service() -> LlmService:
     """Get the singleton LlmService instance"""
     return _llm_service_instance
+
+
+def get_model_cache_service() -> ModelCacheService:
+    """Get the singleton ModelCacheService instance"""
+    return _model_cache_service_instance
 
 
 def get_auth_service() -> AuthService:
@@ -136,6 +143,7 @@ CompletionStreamServiceDep = Annotated[CompletionStreamService, Depends(get_comp
 TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
 TaskRepoDep = Annotated[TaskRepo, Depends(get_task_repo)]
 LLMServiceDep = Annotated[LlmService, Depends(get_llm_service)]
+ModelCacheServiceDep = Annotated[ModelCacheService, Depends(get_model_cache_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 SseServiceDep = Annotated[SseService, Depends(get_sse_service)]
 
