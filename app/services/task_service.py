@@ -100,6 +100,7 @@ class TaskService:
             self.task_repo.update_task_final_status(
                 task_id=task.id,
                 status=TaskStatus.FAILED,
+                completed_at=datetime.now(timezone.utc),
             )
             
             await self.sse_service.emit_event(

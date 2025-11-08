@@ -1,7 +1,7 @@
 from datetime import datetime
 from dataclasses import dataclass
 
-from app.models.task.enums import TaskStatus, StepStatus
+from app.models.task.enums import TaskStatus, StepStatus, ComplexityLevel, ModelCapability
 from app.models.task.responses import TaskResponse, TaskStepResponse
 
 
@@ -35,6 +35,8 @@ class TaskStep:
     step_number: int
     prompt: str
     status: StepStatus
+    complexity: ComplexityLevel
+    required_capabilities: list[ModelCapability]
     model_name: str | None
     response_content: str | None
     started_at: datetime | None
@@ -57,6 +59,8 @@ class TaskStep:
 @dataclass
 class TaskStepDefinition:
     prompt: str
+    complexity: ComplexityLevel
+    required_capabilities: list[ModelCapability]
 
 
 @dataclass

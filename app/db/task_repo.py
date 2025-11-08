@@ -1,8 +1,9 @@
+import json
 from datetime import datetime
 from uuid import uuid4
 
 from app.db.database import Database, register_schema_sql
-from app.models.task.enums import TaskStatus, StepStatus
+from app.models.task.enums import TaskStatus, StepStatus, ComplexityLevel, ModelCapability
 from app.models.task.models import Task, TaskStep, TaskStepDefinition
 
 
@@ -32,6 +33,8 @@ def _create_task_steps_table() -> str:
             step_number INTEGER NOT NULL,
             prompt TEXT NOT NULL,
             status TEXT NOT NULL,
+            complexity TEXT NOT NULL,
+            required_capabilities TEXT NOT NULL,
             model_name TEXT,
             response_content TEXT,
             started_at TEXT,
@@ -144,18 +147,21 @@ class TaskRepo:
         )
         
         for step_number, step_def in enumerate(steps):
+            capabilities_json = json.dumps([cap.value for cap in step_def.required_capabilities])
             self.db.execute_update(
                 """
                 INSERT INTO task_steps 
-                (id, task_id, step_number, prompt, status)
-                VALUES (?, ?, ?, ?, ?)
+                (id, task_id, step_number, prompt, status, complexity, required_capabilities)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(uuid4()),
                     task_id,
                     step_number,
                     step_def.prompt,
-                    StepStatus.PENDING.value
+                    StepStatus.PENDING.value,
+                    step_def.complexity.value,
+                    capabilities_json,
                 ),
             )
         
@@ -189,8 +195,8 @@ class TaskRepo:
         
         rows = self.db.execute_query(
             """
-            SELECT id, task_id, step_number, prompt, status, model_name, 
-                   response_content, started_at, completed_at, depends_on_steps, additional_context
+            SELECT id, task_id, step_number, prompt, status, complexity, required_capabilities,
+                   model_name, response_content, started_at, completed_at
             FROM task_steps
             WHERE task_id = ?
             ORDER BY step_number ASC
@@ -234,8 +240,8 @@ class TaskRepo:
         
         if not updates:
             rows = self.db.execute_query(
-                """SELECT id, task_id, step_number, prompt, status, model_name, 
-                          response_content, started_at, completed_at, depends_on_steps, additional_context
+                """SELECT id, task_id, step_number, prompt, status, complexity, required_capabilities,
+                          model_name, response_content, started_at, completed_at
                    FROM task_steps WHERE id = ?""",
                 (step_id,),
             )
@@ -249,8 +255,8 @@ class TaskRepo:
         )
         
         rows = self.db.execute_query(
-            """SELECT id, task_id, step_number, prompt, status, model_name, 
-                      response_content, started_at, completed_at, depends_on_steps, additional_context
+            """SELECT id, task_id, step_number, prompt, status, complexity, required_capabilities,
+                      model_name, response_content, started_at, completed_at
                FROM task_steps WHERE id = ?""",
             (step_id,),
         )
@@ -269,12 +275,17 @@ class TaskRepo:
         )
     
     def _row_to_task_step(self, row: dict) -> TaskStep:
+        capabilities_list = json.loads(row["required_capabilities"])
+        capabilities = [ModelCapability(cap) for cap in capabilities_list]
+        
         return TaskStep(
             id=row["id"],
             task_id=row["task_id"],
             step_number=row["step_number"],
             prompt=row["prompt"],
             status=StepStatus(row["status"]),
+            complexity=ComplexityLevel(row["complexity"]),
+            required_capabilities=capabilities,
             model_name=row["model_name"],
             response_content=row["response_content"],
             started_at=datetime.fromisoformat(row["started_at"]) if row["started_at"] else None,
