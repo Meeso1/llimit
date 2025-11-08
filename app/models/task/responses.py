@@ -26,6 +26,8 @@ class TaskStepResponse(BaseModel):
     step_number: int
     prompt: str
     status: StepStatus
+    complexity: str
+    required_capabilities: list[str]
     model_name: str | None = Field(None, description="The model selected for this step")
     response_content: str | None = Field(None, description="The LLM response for this step")
     started_at: datetime | None

@@ -1,4 +1,4 @@
 {
-  "prompt": "Research the latest developments in quantum computing, write a summary report, and create a presentation outline"
+  "prompt": "I want to create a simple web app that integrates with models using OpenAI API. I'm deciding between writing it using Python, Typescript, or C#. I want to be able to write the app with relativealy little code, especially when it comes to OpenAI API integration. Please research available frameworks etc. in specified programming languages, and create a comparison between them."
 }
 

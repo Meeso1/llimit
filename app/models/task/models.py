@@ -49,6 +49,8 @@ class TaskStep:
             step_number=self.step_number,
             prompt=self.prompt,
             status=self.status,
+            complexity=self.complexity,
+            required_capabilities=self.required_capabilities,
             model_name=self.model_name,
             response_content=self.response_content,
             started_at=self.started_at,
