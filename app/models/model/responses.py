@@ -7,10 +7,7 @@ class ModelPricingResponse(BaseModel):
     request: float | None = None
     image: float | None = None
     audio: float | None = None
-    web_search: float | None = None
     internal_reasoning: float | None = None
-    input_cache_read: float | None = None
-    input_cache_write: float | None = None
 
 
 class ModelArchitectureResponse(BaseModel):
@@ -30,6 +27,11 @@ class ModelDescriptionResponse(BaseModel):
     pricing: ModelPricingResponse
     is_moderated: bool
     supported_parameters: list[str]
+    
+    # Computed capability flags
+    supports_reasoning: bool
+    supports_tools: bool
+    supports_structured_outputs: bool
 
 
 class ModelsListResponse(BaseModel):

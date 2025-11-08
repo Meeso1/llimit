@@ -18,10 +18,7 @@ class ModelPricing:
     request: float | None = None  # Cost per request
     image: float | None = None  # Cost per image
     audio: float | None = None  # Cost per audio token (per million)
-    web_search: float | None = None  # Cost for web search feature
     internal_reasoning: float | None = None  # Cost for reasoning tokens (per million)
-    input_cache_read: float | None = None  # Cost per million cached input tokens read
-    input_cache_write: float | None = None  # Cost per million cached input tokens written
 
     def to_response(self) -> ModelPricingResponse:
         return ModelPricingResponse(
@@ -30,10 +27,7 @@ class ModelPricing:
             request=self.request,
             image=self.image,
             audio=self.audio,
-            web_search=self.web_search,
             internal_reasoning=self.internal_reasoning,
-            input_cache_read=self.input_cache_read,
-            input_cache_write=self.input_cache_write,
         )
 
 
@@ -67,6 +61,27 @@ class ModelDescription:
     is_moderated: bool  # Whether the model has content moderation
     supported_parameters: list[str]  # List of supported API parameters
 
+    @property
+    def supports_reasoning(self) -> bool:
+        """Whether the model supports extended thinking/reasoning"""
+        return "reasoning" in self.supported_parameters or "include_reasoning" in self.supported_parameters
+
+    @property
+    def supports_tools(self) -> bool:
+        """Whether the model supports tool/function calling"""
+        return "tools" in self.supported_parameters or "tool_choice" in self.supported_parameters
+
+    @property
+    def supports_structured_outputs(self) -> bool:
+        """Whether the model supports structured output formats"""
+        return "structured_outputs" in self.supported_parameters
+
+    # TODO: Add web search detection. The OpenRouter API doesn't provide reliable metadata
+    # for detecting web search capabilities. Some models have 'web_search_options' in
+    # supported_parameters (controllable), some have web_search pricing (charged per use),
+    # and some have built-in grounding (like Gemini) with no API indication.
+    # Will need to maintain a manual list or find another data source.
+
     def to_response(self) -> ModelDescriptionResponse:
         return ModelDescriptionResponse(
             id=self.id,
@@ -78,5 +93,8 @@ class ModelDescription:
             pricing=self.pricing.to_response(),
             is_moderated=self.is_moderated,
             supported_parameters=self.supported_parameters,
+            supports_reasoning=self.supports_reasoning,
+            supports_tools=self.supports_tools,
+            supports_structured_outputs=self.supports_structured_outputs,
         )
 

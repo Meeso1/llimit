@@ -284,10 +284,7 @@ class OpenRouterLlmService(LlmService):
                 request=float(pricing_data["request"]) if pricing_data.get("request") and float(pricing_data["request"]) > 0 else None,
                 image=float(pricing_data["image"]) if pricing_data.get("image") and float(pricing_data["image"]) > 0 else None,
                 audio=float(pricing_data["audio"]) * 1_000_000 if pricing_data.get("audio") and float(pricing_data["audio"]) > 0 else None,
-                web_search=float(pricing_data["web_search"]) if pricing_data.get("web_search") and float(pricing_data["web_search"]) > 0 else None,
                 internal_reasoning=float(pricing_data["internal_reasoning"]) * 1_000_000 if pricing_data.get("internal_reasoning") and float(pricing_data["internal_reasoning"]) > 0 else None,
-                input_cache_read=float(pricing_data["input_cache_read"]) * 1_000_000 if pricing_data.get("input_cache_read") and float(pricing_data["input_cache_read"]) > 0 else None,
-                input_cache_write=float(pricing_data["input_cache_write"]) * 1_000_000 if pricing_data.get("input_cache_write") and float(pricing_data["input_cache_write"]) > 0 else None,
             )
             
             # Extract architecture information
