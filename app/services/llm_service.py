@@ -3,7 +3,8 @@ from openai import AsyncOpenAI
 import re
 import httpx
 
-from app.services.llm_service_base import LlmService, ModelDescription, StreamedChunk, LlmMessage
+from app.models.model.models import ModelDescription, ModelPricing, ModelArchitecture
+from app.services.llm_service_base import LlmService, StreamedChunk, LlmMessage
 
 
 # TODO: Handle API errors related to API key (incorrect, no credits, etc.) and return 422 from API
@@ -266,26 +267,52 @@ class OpenRouterLlmService(LlmService):
         
         models = []
         for model_data in data.get("data", []):
-            model_provider = model_data.get("id", "").split("/")[0] if "/" in model_data.get("id", "") else ""
+            model_id = model_data.get("id", "")
+            model_provider = model_id.split("/")[0] if "/" in model_id else ""
             if provider is not None and model_provider != provider:
                 continue
 
             # Extract pricing information
-            pricing = model_data.get("pricing", {})
-            input_cost = float(pricing.get("prompt", 0))
-            output_cost = float(pricing.get("completion", 0))
+            pricing_data = model_data.get("pricing", {})
+            input_cost = float(pricing_data.get("prompt", 0))
+            output_cost = float(pricing_data.get("completion", 0))
             
             # OpenRouter returns cost per token, convert to per million
-            input_cost_per_million = input_cost * 1_000_000
-            output_cost_per_million = output_cost * 1_000_000
+            pricing = ModelPricing(
+                prompt_per_million=input_cost * 1_000_000,
+                completion_per_million=output_cost * 1_000_000,
+                request=float(pricing_data["request"]) if pricing_data.get("request") and float(pricing_data["request"]) > 0 else None,
+                image=float(pricing_data["image"]) if pricing_data.get("image") and float(pricing_data["image"]) > 0 else None,
+                audio=float(pricing_data["audio"]) * 1_000_000 if pricing_data.get("audio") and float(pricing_data["audio"]) > 0 else None,
+                web_search=float(pricing_data["web_search"]) if pricing_data.get("web_search") and float(pricing_data["web_search"]) > 0 else None,
+                internal_reasoning=float(pricing_data["internal_reasoning"]) * 1_000_000 if pricing_data.get("internal_reasoning") and float(pricing_data["internal_reasoning"]) > 0 else None,
+                input_cache_read=float(pricing_data["input_cache_read"]) * 1_000_000 if pricing_data.get("input_cache_read") and float(pricing_data["input_cache_read"]) > 0 else None,
+                input_cache_write=float(pricing_data["input_cache_write"]) * 1_000_000 if pricing_data.get("input_cache_write") and float(pricing_data["input_cache_write"]) > 0 else None,
+            )
+            
+            # Extract architecture information
+            arch_data = model_data.get("architecture", {})
+            architecture = ModelArchitecture(
+                modality=arch_data.get("modality", "text->text"),
+                input_modalities=arch_data.get("input_modalities", ["text"]),
+                output_modalities=arch_data.get("output_modalities", ["text"]),
+                tokenizer=arch_data.get("tokenizer", "Other"),
+            )
+            
+            # Extract provider information
+            top_provider = model_data.get("top_provider", {})
+            is_moderated = top_provider.get("is_moderated", False)
             
             models.append(ModelDescription(
-                name=model_data.get("id", ""),
-                description=model_data.get("description", ""),
+                id=model_id,
+                name=model_data.get("name", model_id),
                 provider=model_provider,
+                description=model_data.get("description", ""),
                 context_length=model_data.get("context_length", 0),
-                input_cost_per_million=input_cost_per_million,
-                output_cost_per_million=output_cost_per_million,
+                architecture=architecture,
+                pricing=pricing,
+                is_moderated=is_moderated,
+                supported_parameters=model_data.get("supported_parameters", []),
             ))
         
         return models

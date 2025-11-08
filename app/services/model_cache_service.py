@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
-from app.services.llm_service_base import LlmService, ModelDescription
+from app.models.model.models import ModelDescription
+from app.services.llm_service_base import LlmService
 
 
 CACHE_DURATION_SECONDS = 86400 # 1 day

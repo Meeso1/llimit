@@ -2,22 +2,14 @@ from abc import abstractmethod, ABC
 from dataclasses import dataclass
 from typing import AsyncGenerator
 
+from app.models.model.models import ModelDescription
+
 
 @dataclass
 class LlmMessage:
     role: str
     content: str
     additional_data: dict[str, str]
-
-
-@dataclass
-class ModelDescription:
-    name: str
-    description: str
-    provider: str
-    context_length: int
-    input_cost_per_million: float  # Cost per 1M input tokens in USD
-    output_cost_per_million: float  # Cost per 1M output tokens in USD
 
 
 @dataclass
