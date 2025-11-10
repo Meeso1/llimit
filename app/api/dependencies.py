@@ -18,7 +18,9 @@ from app.services.model_cache_service import ModelCacheService
 from app.services.sse_service import SseService
 from app.services.task_decomposition_service import TaskDecompositionService
 from app.services.task_model_selection_service import TaskModelSelectionService
-from app.services.task_service import TaskService
+from app.services.task_creation_service import TaskCreationService
+from app.services.task_step_execution_service import TaskStepExecutionService
+from app.services.work_queue_service import WorkQueueService
 
 # Singleton instances
 _database_instance = Database()
@@ -31,7 +33,6 @@ _model_cache_service_instance = ModelCacheService(_llm_service_instance)
 _sse_service_instance = SseService()
 _api_key_service_instance = ApiKeyService(_api_key_repo_instance)
 _auth_service_instance = AuthService(_api_key_service_instance)
-_task_decomposition_service_instance = TaskDecompositionService(_llm_service_instance)
 _task_model_selection_service_instance = TaskModelSelectionService()
 _chat_service_instance = ChatService(
     llm_service=_llm_service_instance,
@@ -39,12 +40,26 @@ _chat_service_instance = ChatService(
     sse_service=_sse_service_instance,
 )
 _completion_stream_service_instance = CompletionStreamService(llm_service=_llm_service_instance)
-_task_service_instance = TaskService(
+_task_decomposition_service_instance = TaskDecompositionService(
+    llm_service=_llm_service_instance,
+    task_repo=_task_repo_instance,
+    sse_service=_sse_service_instance,
+)
+_task_step_execution_service_instance = TaskStepExecutionService(
     task_repo=_task_repo_instance,
     llm_service=_llm_service_instance,
     sse_service=_sse_service_instance,
-    decomposition_service=_task_decomposition_service_instance,
     model_selection_service=_task_model_selection_service_instance,
+)
+_work_queue_service_instance = WorkQueueService(
+    task_repo=_task_repo_instance,
+    sse_service=_sse_service_instance,
+    decomposition_service=_task_decomposition_service_instance,
+    step_execution_service=_task_step_execution_service_instance,
+)
+_task_creation_service_instance = TaskCreationService(
+    task_repo=_task_repo_instance,
+    work_queue_service=_work_queue_service_instance,
 )
 
 
@@ -70,6 +85,11 @@ def get_api_key_repo() -> ApiKeyRepo:
 def get_task_repo() -> TaskRepo:
     """Get the singleton TaskRepo instance"""
     return _task_repo_instance
+
+
+def get_work_queue_service() -> WorkQueueService:
+    """Get the singleton WorkQueueService instance"""
+    return _work_queue_service_instance
 
 
 def get_api_key_service() -> ApiKeyService:
@@ -117,9 +137,9 @@ def get_completion_stream_service() -> CompletionStreamService:
     return _completion_stream_service_instance
 
 
-def get_task_service() -> TaskService:
-    """Get the singleton TaskService instance"""
-    return _task_service_instance
+def get_task_creation_service() -> TaskCreationService:
+    """Get the singleton TaskCreationService instance"""
+    return _task_creation_service_instance
 
 
 def get_auth_context(require_openrouter_key: bool = True):
@@ -140,7 +160,7 @@ def get_auth_context(require_openrouter_key: bool = True):
 # Type annotations for dependencies
 ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
 CompletionStreamServiceDep = Annotated[CompletionStreamService, Depends(get_completion_stream_service)]
-TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
+TaskCreationServiceDep = Annotated[TaskCreationService, Depends(get_task_creation_service)]
 TaskRepoDep = Annotated[TaskRepo, Depends(get_task_repo)]
 LLMServiceDep = Annotated[LlmService, Depends(get_llm_service)]
 ModelCacheServiceDep = Annotated[ModelCacheService, Depends(get_model_cache_service)]

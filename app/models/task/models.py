@@ -39,6 +39,7 @@ class TaskStep:
     required_capabilities: list[ModelCapability]
     model_name: str | None
     response_content: str | None
+    output: str | None
     started_at: datetime | None
     completed_at: datetime | None
 
@@ -53,6 +54,7 @@ class TaskStep:
             required_capabilities=self.required_capabilities,
             model_name=self.model_name,
             response_content=self.response_content,
+            output=self.output,
             started_at=self.started_at,
             completed_at=self.completed_at,
         )

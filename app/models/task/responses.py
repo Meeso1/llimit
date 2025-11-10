@@ -30,6 +30,7 @@ class TaskStepResponse(BaseModel):
     required_capabilities: list[str]
     model_name: str | None = Field(None, description="The model selected for this step")
     response_content: str | None = Field(None, description="The LLM response for this step")
+    output: str | None = Field(None, description="Concise output from the step")
     started_at: datetime | None
     completed_at: datetime | None
 

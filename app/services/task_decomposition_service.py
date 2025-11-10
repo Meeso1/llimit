@@ -1,7 +1,12 @@
 import json
+from uuid import uuid4
 
+from app.db.task_repo import TaskRepo
+from app.events.task_events import create_task_steps_generated_event
 from app.services.llm_service_base import LlmService, LlmMessage
+from app.services.sse_service import SseService
 from app.models.task.models import TaskDecompositionResult, TaskStepDefinition
+from app.models.task.work_queue import WorkQueueItem, WorkItemType
 from app.models.task.enums import ComplexityLevel, ModelCapability
 
 
@@ -10,8 +15,53 @@ class TaskDecompositionError(Exception):
 
 
 class TaskDecompositionService:
-    def __init__(self, llm_service: LlmService) -> None:
+    def __init__(
+        self,
+        llm_service: LlmService,
+        task_repo: TaskRepo,
+        sse_service: SseService,
+    ) -> None:
         self.llm_service = llm_service
+        self.task_repo = task_repo
+        self.sse_service = sse_service
+    
+    async def decompose_and_queue_task(
+        self,
+        task_id: str,
+        user_id: str,
+        api_key: str,
+    ) -> list[WorkQueueItem]:
+        """
+        Decompose a task, update DB, emit events, and return next work items to queue.
+        """
+        task = self.task_repo.get_task_by_id(task_id, user_id)
+        if not task:
+            raise Exception(f"Task {task_id} not found")
+        
+        decomposition = await self.decompose_task(task.prompt, api_key)
+        
+        updated_task = self.task_repo.update_task_after_steps_generation(
+            task_id=task.id,
+            title=decomposition.title,
+            steps=decomposition.steps,
+        )
+        
+        if not updated_task:
+            raise Exception("Failed to update task after decomposition")
+        
+        steps = self.task_repo.get_steps_by_task_id(task.id, user_id)
+        if not steps:
+            raise Exception("Failed to retrieve generated steps")
+        
+        await self.sse_service.emit_event(
+            user_id=user_id,
+            event=create_task_steps_generated_event(updated_task, steps),
+        )
+        
+        if len(steps) > 0:
+            return [WorkQueueItem.make_task_step_execution_item(task, steps[0].id, api_key)]
+        
+        return []
     
     async def decompose_task(
         self,

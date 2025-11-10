@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.api.dependencies import AuthContextDep, TaskServiceDep, TaskRepoDep
+from app.api.dependencies import AuthContextDep, TaskCreationServiceDep, TaskRepoDep
 from app.models.task.requests import CreateTaskRequest
 from app.models.task.responses import (
     TaskResponse,
@@ -18,7 +18,7 @@ router = APIRouter(
 async def create_task(
     request_body: CreateTaskRequest,
     context: AuthContextDep(require_openrouter_key=True),
-    task_service: TaskServiceDep,
+    task_creation_service: TaskCreationServiceDep,
 ) -> TaskResponse:
     """
     Create a new multi-step task.
@@ -26,7 +26,7 @@ async def create_task(
     The task will be decomposed into steps asynchronously.
     Subscribe to SSE events to get notified when steps are generated and completed.
     """
-    task = await task_service.create_task(
+    task = await task_creation_service.create_task(
         user_id=context.user_id,
         request=request_body,
         api_key=context.openrouter_api_key,

@@ -37,6 +37,7 @@ def _create_task_steps_table() -> str:
             required_capabilities TEXT NOT NULL,
             model_name TEXT,
             response_content TEXT,
+            output TEXT,
             started_at TEXT,
             completed_at TEXT,
             FOREIGN KEY (task_id) REFERENCES tasks(id)
@@ -196,7 +197,7 @@ class TaskRepo:
         rows = self.db.execute_query(
             """
             SELECT id, task_id, step_number, prompt, status, complexity, required_capabilities,
-                   model_name, response_content, started_at, completed_at
+                   model_name, response_content, output, started_at, completed_at
             FROM task_steps
             WHERE task_id = ?
             ORDER BY step_number ASC
@@ -212,6 +213,7 @@ class TaskRepo:
         status: StepStatus | None = None,
         model_name: str | None = None,
         response_content: str | None = None,
+        output: str | None = None,
         started_at: datetime | None = None,
         completed_at: datetime | None = None,
     ) -> TaskStep | None:
@@ -230,6 +232,10 @@ class TaskRepo:
             updates.append("response_content = ?")
             params.append(response_content)
         
+        if output is not None:
+            updates.append("output = ?")
+            params.append(output)
+        
         if started_at is not None:
             updates.append("started_at = ?")
             params.append(started_at.isoformat())
@@ -241,7 +247,7 @@ class TaskRepo:
         if not updates:
             rows = self.db.execute_query(
                 """SELECT id, task_id, step_number, prompt, status, complexity, required_capabilities,
-                          model_name, response_content, started_at, completed_at
+                          model_name, response_content, output, started_at, completed_at
                    FROM task_steps WHERE id = ?""",
                 (step_id,),
             )
@@ -256,7 +262,7 @@ class TaskRepo:
         
         rows = self.db.execute_query(
             """SELECT id, task_id, step_number, prompt, status, complexity, required_capabilities,
-                      model_name, response_content, started_at, completed_at
+                      model_name, response_content, output, started_at, completed_at
                FROM task_steps WHERE id = ?""",
             (step_id,),
         )
@@ -274,6 +280,23 @@ class TaskRepo:
             steps_generated=bool(row["steps_generated"]),
         )
     
+    def get_step_by_id(self, step_id: str) -> TaskStep | None:
+        """Get a step by its ID"""
+        rows = self.db.execute_query(
+            """
+            SELECT id, task_id, step_number, prompt, status, complexity, required_capabilities,
+                   model_name, response_content, output, started_at, completed_at
+            FROM task_steps
+            WHERE id = ?
+            """,
+            (step_id,),
+        )
+        
+        if not rows:
+            return None
+        
+        return self._row_to_task_step(rows[0])
+    
     def _row_to_task_step(self, row: dict) -> TaskStep:
         capabilities_list = json.loads(row["required_capabilities"])
         capabilities = [ModelCapability(cap) for cap in capabilities_list]
@@ -288,6 +311,7 @@ class TaskRepo:
             required_capabilities=capabilities,
             model_name=row["model_name"],
             response_content=row["response_content"],
+            output=row["output"],
             started_at=datetime.fromisoformat(row["started_at"]) if row["started_at"] else None,
             completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
         )

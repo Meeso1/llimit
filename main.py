@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
-from app.api.dependencies import get_database, get_user_repo, get_api_key_service
+from app.api.dependencies import get_database, get_user_repo, get_api_key_service, get_work_queue_service
 from app.api.routes.api_keys import router as api_keys_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.completions import router as completions_router
@@ -82,6 +82,11 @@ database = get_database()
 database.initialize_schema()
 
 app = create_app()
+
+# TODO: This doesn't work - no running event loop
+# Start work queue service
+work_queue_service = get_work_queue_service()
+work_queue_service.start_processing()
 
 # Seed default user with API key
 user_repo = get_user_repo()
