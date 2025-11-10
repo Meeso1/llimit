@@ -10,7 +10,7 @@ from app.events.task_events import (
     create_task_failed_event,
 )
 from app.models.task.enums import TaskStatus
-from app.models.task.models import Task
+from app.models.task.models import Task, TaskStep
 from app.models.task.requests import CreateTaskRequest
 from app.services.llm_service_base import LlmService
 from app.services.sse_service import SseService
@@ -53,26 +53,7 @@ class TaskService:
     
     async def _process_task(self, task: Task, api_key: str) -> None:
         try:
-            decomposition = await self.decomposition_service.decompose_task(
-                user_prompt=task.prompt,
-                api_key=api_key,
-            )
-            
-            task = self.task_repo.update_task_after_steps_generation(
-                task_id=task.id,
-                title=decomposition.title,
-                steps=decomposition.steps,
-            )
-            
-            steps = self.task_repo.get_steps_by_task_id(task.id, task.user_id)
-            
-            if not task or steps is None:
-                raise Exception("Task or steps not found after generation")
-            
-            await self.sse_service.emit_event(
-                user_id=task.user_id,
-                event=create_task_steps_generated_event(task, steps),
-            )
+            task, steps = await self._decompose_task(task, api_key)
             
             # Step 2: Execute steps (TODO: implement full execution logic)
             # For now, this is a placeholder
@@ -107,3 +88,30 @@ class TaskService:
                 user_id=task.user_id,
                 event=create_task_failed_event(task, str(e)),
             )
+
+    async def _decompose_task(self, task: Task, api_key: str) -> tuple[Task, list[TaskStep]]:
+        decomposition = await self.decomposition_service.decompose_task(
+            user_prompt=task.prompt,
+            api_key=api_key,
+        )
+        
+        task = self._expect_not_none(self.task_repo.update_task_after_steps_generation(
+            task_id=task.id,
+            title=decomposition.title,
+            steps=decomposition.steps,
+        ))
+        
+        steps = self._expect_not_none(self.task_repo.get_steps_by_task_id(task.id, task.user_id))
+        
+        await self.sse_service.emit_event(
+            user_id=task.user_id,
+            event=create_task_steps_generated_event(task, steps),
+        )
+        
+        return task, steps
+    
+    def _expect_not_none[T](self, value: T | None, value_name: str | None = None) -> T:
+        if value is None:
+            raise Exception(f"{value_name} is None, which is unexpected")
+        return value
+    

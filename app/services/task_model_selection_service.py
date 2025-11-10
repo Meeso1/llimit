@@ -17,6 +17,4 @@ class TaskModelSelectionService:
         # 3. Balance performance vs cost
         # 4. Consider model strengths (e.g., Claude for writing, GPT-4 for reasoning)
         
-        # Temporary hardcoded implementation for testing
-        # Simple keyword-based selection
-        return "openai/gpt-4o-mini"
+        return "google/gemini-2.5-flash-lite"
