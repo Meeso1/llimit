@@ -26,6 +26,7 @@ class WorkQueueService:
         self.step_execution_service = step_execution_service
         self._queue: asyncio.Queue[WorkQueueItem] = asyncio.Queue()
         self._processing = False
+        self._processing_task: asyncio.Task | None = None
     
     async def enqueue(self, item: WorkQueueItem) -> None:
         """Add a work item to the queue"""
@@ -46,7 +47,19 @@ class WorkQueueService:
             return
         
         self._processing = True
-        asyncio.create_task(self._process_queue_loop())
+        self._processing_task = asyncio.create_task(self._process_queue_loop())
+    
+    async def stop_processing(self) -> None:
+        """Stop processing work queue items"""
+        if not self._processing or not self._processing_task:
+            return
+        
+        self._processing = False
+        self._processing_task.cancel()
+        try:
+            await self._processing_task
+        except asyncio.CancelledError:
+            pass  # Expected on cancellation
     
     async def _process_queue_loop(self) -> None:
         """Main loop to process queue items"""
@@ -91,6 +104,9 @@ class WorkQueueService:
                             event=create_task_failed_event(task, str(e)),
                         )
             
+            except asyncio.CancelledError:
+                print("Work queue processing loop cancelled.")
+                break
             except Exception as e:
                 print(f"Unexpected error in work queue processing: {e}")
                 await asyncio.sleep(1)

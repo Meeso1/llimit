@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -45,6 +47,15 @@ def custom_openapi(app: FastAPI):
     return app.openapi_schema
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for FastAPI application startup and shutdown"""
+    work_queue_service = get_work_queue_service()
+    work_queue_service.start_processing()
+    yield
+    await work_queue_service.stop_processing()
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
@@ -53,6 +64,7 @@ def create_app() -> FastAPI:
         swagger_ui_parameters={
             "persistAuthorization": True,
         },
+        lifespan=lifespan,
     )
     
     app.add_middleware(
@@ -82,11 +94,6 @@ database = get_database()
 database.initialize_schema()
 
 app = create_app()
-
-# TODO: This doesn't work - no running event loop
-# Start work queue service
-work_queue_service = get_work_queue_service()
-work_queue_service.start_processing()
 
 # Seed default user with API key
 user_repo = get_user_repo()
