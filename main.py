@@ -107,10 +107,12 @@ if user_repo.get_user_by_id("default") is None:
     result = api_key_service.create_api_key(
         user_id="default",
         name="Default API Key",
+        key_value=settings.api_key,
     )
     
-    print(f"Default user created with API key: {result.plaintext_key}")
-    print("Save this key securely - it won't be shown again!")
+    if result.plaintext_key != settings.api_key:
+        print(f"Default user created with API key: {result.plaintext_key}")
+        print("Save this key securely - it won't be shown again!")
 
 
 if __name__ == "__main__":

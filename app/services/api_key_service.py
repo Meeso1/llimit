@@ -27,9 +27,9 @@ class ApiKeyService:
     def generate_api_key(self) -> str:
         return f"llimit_{secrets.token_urlsafe(32)}"
     
-    def create_api_key(self, user_id: str, name: str) -> ApiKeyCreationResult:
+    def create_api_key(self, user_id: str, name: str, key_value: str | None = None) -> ApiKeyCreationResult:
         key_id = str(uuid.uuid4())
-        plaintext_key = self.generate_api_key()
+        plaintext_key = key_value or self.generate_api_key()
         key_hash = self.hash_key(plaintext_key)
         
         new_api_key = self.api_key_repo.create_api_key(
