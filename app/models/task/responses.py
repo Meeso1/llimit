@@ -14,6 +14,7 @@ class TaskResponse(BaseModel):
     steps_generated: bool = Field(
         description="Whether the task has been decomposed into steps yet"
     )
+    output: str | None = Field(None, description="Output from the last step of the task")
 
 
 class TaskListResponse(BaseModel):

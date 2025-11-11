@@ -89,15 +89,17 @@ class TaskStepExecutionService:
         )
         
         updated_step = self.task_repo.get_step_by_id(step.id)
-        if updated_step:
-            await self.sse_service.emit_event(
-                user_id=task.user_id,
-                event=create_task_step_completed_event(task, updated_step),
-            )
+        if not updated_step:
+            raise Exception(f"Step {step.id} not found after update")
+        
+        await self.sse_service.emit_event(
+            user_id=task.user_id,
+            event=create_task_step_completed_event(task, updated_step),
+        )
         
         next_items, is_done = await self._get_next_work_items_and_check_if_done(task, step, api_key)
         if is_done:
-            await self._handle_task_completion(task)
+            await self._handle_task_completion(task, updated_step)
                 
         return next_items
     
@@ -140,11 +142,12 @@ class TaskStepExecutionService:
         else:
             return [], all(s.status == StepStatus.COMPLETED for s in all_steps)
         
-    async def _handle_task_completion(self, task: Task) -> None:
+    async def _handle_task_completion(self, task: Task, last_step: TaskStep) -> None:
         updated_task = self.task_repo.update_task_final_status(
             task_id=task.id,
             status=TaskStatus.COMPLETED,
             completed_at=datetime.now(timezone.utc),
+            output=last_step.output,
         )
         
         if updated_task:

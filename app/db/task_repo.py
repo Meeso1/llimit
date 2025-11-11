@@ -19,6 +19,7 @@ def _create_tasks_table() -> str:
             created_at TEXT NOT NULL,
             completed_at TEXT,
             steps_generated INTEGER NOT NULL DEFAULT 0,
+            output TEXT,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """
@@ -100,13 +101,14 @@ class TaskRepo:
             created_at=created_at,
             completed_at=None,
             steps_generated=False,
+            output=None,
         )
     
     def get_task_by_id(self, task_id: str, user_id: str) -> Task | None:
         """Get a task by ID for a specific user"""
         rows = self.db.execute_query(
             """
-            SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated
+            SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated, output
             FROM tasks
             WHERE id = ? AND user_id = ?
             """,
@@ -122,7 +124,7 @@ class TaskRepo:
         """List all tasks for a specific user"""
         rows = self.db.execute_query(
             """
-            SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated
+            SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated, output
             FROM tasks
             WHERE user_id = ?
             ORDER BY created_at DESC
@@ -167,7 +169,7 @@ class TaskRepo:
             )
         
         rows = self.db.execute_query(
-            "SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated FROM tasks WHERE id = ?",
+            "SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated, output FROM tasks WHERE id = ?",
             (task_id,),
         )
         return self._row_to_task(rows[0]) if rows else None
@@ -177,14 +179,15 @@ class TaskRepo:
         task_id: str,
         status: TaskStatus,
         completed_at: datetime,
+        output: str | None = None,
     ) -> Task | None:
         self.db.execute_update(
-            "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
-            (status.value, completed_at.isoformat(), task_id),
+            "UPDATE tasks SET status = ?, completed_at = ?, output = ? WHERE id = ?",
+            (status.value, completed_at.isoformat(), output, task_id),
         )
         
         rows = self.db.execute_query(
-            "SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated FROM tasks WHERE id = ?",
+            "SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated, output FROM tasks WHERE id = ?",
             (task_id,),
         )
         return self._row_to_task(rows[0]) if rows else None
@@ -278,6 +281,7 @@ class TaskRepo:
             created_at=datetime.fromisoformat(row["created_at"]),
             completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
             steps_generated=bool(row["steps_generated"]),
+            output=row["output"],
         )
     
     def get_step_by_id(self, step_id: str) -> TaskStep | None:

@@ -15,6 +15,7 @@ class Task:
     created_at: datetime
     completed_at: datetime | None
     steps_generated: bool
+    output: str | None
 
     def to_response(self) -> TaskResponse:
         return TaskResponse(
@@ -25,6 +26,7 @@ class Task:
             created_at=self.created_at,
             completed_at=self.completed_at,
             steps_generated=self.steps_generated,
+            output=self.output,
         )
 
 

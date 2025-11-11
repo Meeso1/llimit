@@ -1,4 +1,5 @@
 import asyncio
+import traceback
 from datetime import datetime, timezone
 
 from app.db.task_repo import TaskRepo
@@ -91,6 +92,9 @@ class WorkQueueService:
                         await self.enqueue_many(next_items)
                 
                 except Exception as e:
+                    print(f"Error processing work item {item.item_type}: {e}")
+                    traceback.print_exc()
+
                     self.task_repo.update_task_final_status(
                         task_id=item.task_id,
                         status=TaskStatus.FAILED,
