@@ -60,6 +60,7 @@ _work_queue_service_instance = WorkQueueService(
 _task_creation_service_instance = TaskCreationService(
     task_repo=_task_repo_instance,
     work_queue_service=_work_queue_service_instance,
+    sse_service=_sse_service_instance,
 )
 
 

@@ -79,11 +79,15 @@ class WorkQueueService:
                             api_key=item.api_key,
                         )
                     elif item.item_type == WorkItemType.EXECUTE_STEP:
-                        if item.step_id is None:
-                            raise Exception("Step ID is required for execute_step work item")
-                        
                         next_items = await self.step_execution_service.execute_step(
-                            step_id=item.step_id,
+                            step_id=not_none(item.step_id, "Step ID for execute_step work item"),
+                            task_id=item.task_id,
+                            user_id=item.user_id,
+                            api_key=item.api_key,
+                        )
+                    elif item.item_type == WorkItemType.REEVALUATE:
+                        next_items = await self.decomposition_service.reevaluate_and_queue_task(
+                            step_id=not_none(item.step_id, "Step ID for reevaluate work item"),
                             task_id=item.task_id,
                             user_id=item.user_id,
                             api_key=item.api_key,

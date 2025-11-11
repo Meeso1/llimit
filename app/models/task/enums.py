@@ -14,6 +14,12 @@ class StepStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
+    ABANDONED = "abandoned"
+
+
+class StepType(str, Enum):
+    NORMAL = "normal"
+    REEVALUATE = "reevaluate"
 
 
 class ComplexityLevel(str, Enum):

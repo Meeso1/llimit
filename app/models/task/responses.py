@@ -1,7 +1,7 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
 
-from app.models.task.enums import TaskStatus, StepStatus
+from app.models.task.enums import TaskStatus, StepStatus, StepType
 
 
 class TaskResponse(BaseModel):
@@ -27,9 +27,10 @@ class TaskStepResponse(BaseModel):
     step_number: int
     prompt: str
     status: StepStatus
-    complexity: str
-    required_capabilities: list[str]
-    model_name: str | None = Field(None, description="The model selected for this step")
+    step_type: StepType
+    complexity: str | None = Field(None, description="Complexity level (not applicable for reevaluation steps)")
+    required_capabilities: list[str] = Field(default_factory=list, description="Required capabilities (not applicable for reevaluation steps)")
+    model_name: str | None = Field(None, description="The model selected for this step (not applicable for reevaluation steps)")
     response_content: str | None = Field(None, description="The LLM response for this step")
     output: str | None = Field(None, description="Concise output from the step")
     started_at: datetime | None

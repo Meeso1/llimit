@@ -4,6 +4,20 @@ from app.events.sse_event import SseEvent
 from app.models.task.models import Task, TaskStep
 
 
+def create_task_created_event(task: Task) -> SseEvent:
+    """Create an SSE event when a task is created"""
+    return SseEvent(
+        event_type="task.created",
+        content={
+            "task_id": task.id,
+            "prompt": task.prompt,
+            "status": task.status.value,
+        },
+        metadata={},
+        event_id=str(uuid4()),
+    )
+
+
 def create_task_steps_generated_event(task: Task, steps: list[TaskStep]) -> SseEvent:
     """Create an SSE event when task steps are generated"""
     return SseEvent(
@@ -12,6 +26,22 @@ def create_task_steps_generated_event(task: Task, steps: list[TaskStep]) -> SseE
             "task_id": task.id,
             "title": task.title,
             "step_count": len(steps),
+        },
+        metadata={
+            "task_id": task.id,
+        },
+        event_id=str(uuid4()),
+    )
+
+
+def create_task_steps_regenerated_event(task: Task, steps: list[TaskStep]) -> SseEvent:
+    """Create an SSE event when task steps are regenerated after reevaluation"""
+    return SseEvent(
+        event_type="task.steps_regenerated",
+        content={
+            "task_id": task.id,
+            "new_step_count": len(steps),
+            "first_new_step_number": steps[0].step_number if steps else None,
         },
         metadata={
             "task_id": task.id,

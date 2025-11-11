@@ -1,5 +1,5 @@
 # TODO: Complete implementation
-from app.models.task.models import TaskStepDefinition
+from app.models.task.models import NormalTaskStepDefinition
 
 
 class TaskModelSelectionService:    
@@ -8,7 +8,7 @@ class TaskModelSelectionService:
     
     def select_model_for_step(
         self,
-        step: TaskStepDefinition
+        step: NormalTaskStepDefinition
     ) -> str:
         # TODO: Implement intelligent model selection
         # The selection should consider:

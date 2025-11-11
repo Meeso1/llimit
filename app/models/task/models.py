@@ -1,7 +1,8 @@
 from datetime import datetime
 from dataclasses import dataclass
+from abc import ABC
 
-from app.models.task.enums import TaskStatus, StepStatus, ComplexityLevel, ModelCapability
+from app.models.task.enums import TaskStatus, StepStatus, StepType, ComplexityLevel, ModelCapability
 from app.models.task.responses import TaskResponse, TaskStepResponse
 
 
@@ -31,19 +32,30 @@ class Task:
 
 
 @dataclass
-class TaskStep:
+class TaskStep(ABC):
+    """Base class for all task step types"""
     id: str
     task_id: str
     step_number: int
     prompt: str
     status: StepStatus
+    step_type: StepType
+    response_content: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+
+    def to_response(self) -> TaskStepResponse:
+        """Convert to response DTO - implemented differently for each type"""
+        raise NotImplementedError
+
+
+@dataclass
+class NormalTaskStep(TaskStep):
+    """Normal execution step with model selection"""
     complexity: ComplexityLevel
     required_capabilities: list[ModelCapability]
     model_name: str | None
-    response_content: str | None
     output: str | None
-    started_at: datetime | None
-    completed_at: datetime | None
 
     def to_response(self) -> TaskStepResponse:
         return TaskStepResponse(
@@ -52,6 +64,7 @@ class TaskStep:
             step_number=self.step_number,
             prompt=self.prompt,
             status=self.status,
+            step_type=self.step_type,
             complexity=self.complexity,
             required_capabilities=self.required_capabilities,
             model_name=self.model_name,
@@ -63,10 +76,45 @@ class TaskStep:
 
 
 @dataclass
-class TaskStepDefinition:
+class ReevaluateTaskStep(TaskStep):
+    """Reevaluation step that generates new steps"""
+
+    def to_response(self) -> TaskStepResponse:
+        return TaskStepResponse(
+            id=self.id,
+            task_id=self.task_id,
+            step_number=self.step_number,
+            prompt=self.prompt,
+            status=self.status,
+            step_type=self.step_type,
+            complexity=None,
+            required_capabilities=[],
+            model_name=None,
+            response_content=self.response_content,
+            output=None,
+            started_at=self.started_at,
+            completed_at=self.completed_at,
+        )
+
+
+@dataclass
+class TaskStepDefinition(ABC):
+    """Base class for step definitions"""
     prompt: str
+    step_type: StepType
+
+
+@dataclass
+class NormalTaskStepDefinition(TaskStepDefinition):
+    """Definition for normal execution steps"""
     complexity: ComplexityLevel
     required_capabilities: list[ModelCapability]
+
+
+@dataclass
+class ReevaluateTaskStepDefinition(TaskStepDefinition):
+    """Definition for reevaluation steps"""
+    pass
 
 
 @dataclass

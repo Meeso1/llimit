@@ -87,7 +87,7 @@ async def get_task_steps(
     - Start and completion times
     - Dependencies on other steps
     """
-    steps = task_repo.get_steps_by_task_id(task_id, context.user_id)
+    steps = task_repo.get_steps_by_task_id(task_id, context.user_id, exclude_abandoned=False)
     if steps is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
