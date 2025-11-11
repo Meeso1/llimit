@@ -1,4 +1,4 @@
 {
-  "prompt": "I want to create a simple web app that integrates with models using OpenAI API. I'm deciding between writing it using Python, Typescript, or C#. I want to be able to write the app with relativealy little code, especially when it comes to OpenAI API integration. Please research available frameworks etc. in specified programming languages, and create a comparison between them."
+  "prompt": "I want to learn a new programming language. I already know C# and Python. Please research popular programming languages, focusing on their differences from Python and C#, as well as how practical they are for backend development, and low-level development - I want something usable in those 2 areas, while also significantly different from what I already know."
 }
 

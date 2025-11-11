@@ -120,9 +120,13 @@ class TaskStepExecutionService:
             event=create_task_step_completed_event(task, updated_step),
         )
         
-        next_items, is_done = await self._get_next_work_items_and_check_if_done(task, step, all_steps, api_key)
+        updated_all_steps = not_none(
+            self.task_repo.get_steps_by_task_id(task.id, task.user_id, exclude_abandoned=True),
+            f"Steps for task {task.id}"
+        )
+        next_items, is_done = await self._get_next_work_items_and_check_if_done(task, step, updated_all_steps, api_key)
         if is_done:
-            await self._handle_task_completion(task, all_steps)
+            await self._handle_task_completion(task, updated_all_steps)
                 
         return next_items
     
