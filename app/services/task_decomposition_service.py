@@ -146,6 +146,7 @@ When decomposing a task, follow these guidelines:
    - A clear prompt that describes what needs to be done
    - The complexity level: {complexity_levels}
    - Required model capabilities (only specify if actually needed): {capabilities}
+4. The final step's output will be treated as the final output of the task, and will be shown to the user. This means that usually it's a good idea for the last step to summarize and combine all necessary information from previous steps.
 
 Important notes about step execution:
 - When a step is executed, all previous steps' prompts and outputs will be automatically provided to the model
