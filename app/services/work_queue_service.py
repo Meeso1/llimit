@@ -9,6 +9,7 @@ from app.models.task.work_queue import WorkItemType, WorkQueueItem
 from app.services.sse_service import SseService
 from app.services.task_decomposition_service import TaskDecompositionService
 from app.services.task_step_execution_service import TaskStepExecutionService
+from utils import not_none
 
 
 class WorkQueueService:
@@ -101,12 +102,11 @@ class WorkQueueService:
                         completed_at=datetime.now(timezone.utc),
                     )
                     
-                    task = self.task_repo.get_task_by_id(item.task_id, item.user_id)
-                    if task:
-                        await self.sse_service.emit_event(
-                            user_id=item.user_id,
-                            event=create_task_failed_event(task, str(e)),
-                        )
+                    task = not_none(self.task_repo.get_task_by_id(item.task_id, item.user_id), f"Task {item.task_id}")
+                    await self.sse_service.emit_event(
+                        user_id=item.user_id,
+                        event=create_task_failed_event(task, str(e)),
+                    )
             
             except asyncio.CancelledError:
                 print("Work queue processing loop cancelled.")

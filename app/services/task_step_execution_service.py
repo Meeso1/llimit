@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from app.db.task_repo import TaskRepo
+from utils import not_none
 from app.events.task_events import create_task_step_completed_event, create_task_completed_event
 from app.models.task.enums import TaskStatus, StepStatus
 from app.models.task.models import Task, TaskStep, TaskStepDefinition
@@ -36,13 +37,8 @@ class TaskStepExecutionService:
         """
         Execute a task step and return next work items to queue.
         """
-        step = self.task_repo.get_step_by_id(step_id)
-        if not step:
-            raise Exception(f"Step {step_id} not found")
-        
-        task = self.task_repo.get_task_by_id(task_id, user_id)
-        if not task:
-            raise Exception(f"Task {task_id} not found")
+        step = not_none(self.task_repo.get_step_by_id(step_id), f"Step {step_id}")
+        task = not_none(self.task_repo.get_task_by_id(task_id, user_id), f"Task {task_id}")
         
         if step.model_name is None:
             step_def = TaskStepDefinition(
@@ -89,9 +85,7 @@ class TaskStepExecutionService:
             completed_at=datetime.now(timezone.utc),
         )
         
-        updated_step = self.task_repo.get_step_by_id(step.id)
-        if not updated_step:
-            raise Exception(f"Step {step.id} not found after update")
+        updated_step = not_none(self.task_repo.get_step_by_id(step.id), f"Step {step.id} after update")
         
         await self.sse_service.emit_event(
             user_id=task.user_id,

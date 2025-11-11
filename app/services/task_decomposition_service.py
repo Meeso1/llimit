@@ -1,7 +1,7 @@
 import json
-from uuid import uuid4
 
 from app.db.task_repo import TaskRepo
+from utils import not_none
 from app.events.task_events import create_task_steps_generated_event
 from app.services.llm_service_base import LlmService, LlmMessage
 from app.services.sse_service import SseService
@@ -39,24 +39,20 @@ class TaskDecompositionService:
         """
         Decompose a task, update DB, emit events, and return next work items to queue.
         """
-        task = self.task_repo.get_task_by_id(task_id, user_id)
-        if not task:
-            raise Exception(f"Task {task_id} not found")
+        task = not_none(self.task_repo.get_task_by_id(task_id, user_id), f"Task {task_id}")
         
         decomposition = await self.decompose_task(task.prompt, api_key)
         
-        updated_task = self.task_repo.update_task_after_steps_generation(
-            task_id=task.id,
-            title=decomposition.title,
-            steps=decomposition.steps,
+        updated_task = not_none(
+            self.task_repo.update_task_after_steps_generation(
+                task_id=task.id,
+                title=decomposition.title,
+                steps=decomposition.steps,
+            ),
+            f"Task {task.id} after decomposition"
         )
         
-        if not updated_task:
-            raise Exception("Failed to update task after decomposition")
-        
-        steps = self.task_repo.get_steps_by_task_id(task.id, user_id)
-        if not steps:
-            raise Exception("Failed to retrieve generated steps")
+        steps = not_none(self.task_repo.get_steps_by_task_id(task.id, user_id), f"Generated steps for task {task.id}")
         
         await self.sse_service.emit_event(
             user_id=user_id,

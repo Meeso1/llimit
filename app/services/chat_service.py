@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.db.chat_repo import ChatRepo
+from utils import not_none
 from app.events.new_llm_message import new_llm_message
 from app.events.new_llm_message_chunk import new_llm_message_chunk
 from app.models.chat.requests import (
@@ -108,14 +109,16 @@ class ChatService:
         return user_message_id
     
     def _prepare_llm_messages(self, thread_id: str, user_id: str) -> list[LlmMessage]:
-        messages = self._chat_repo.get_messages(thread_id, user_id)
-        if messages is None:
-            raise ValueError(f"No messages found for thread {thread_id} and user {user_id}")
+        messages = not_none(
+            self._chat_repo.get_messages(thread_id, user_id),
+            f"Messages for thread {thread_id} and user {user_id}"
+        )
         
         # Get thread for metadata
-        thread = self._chat_repo.get_thread_by_id_and_user(thread_id, user_id)
-        if thread is None:
-            raise ValueError(f"Thread {thread_id} not found for user {user_id}")
+        thread = not_none(
+            self._chat_repo.get_thread_by_id_and_user(thread_id, user_id),
+            f"Thread {thread_id} for user {user_id}"
+        )
         
         return [
             LlmMessage(
@@ -186,9 +189,6 @@ class ChatService:
     ) -> None:
         try:
             llm_messages = self._prepare_llm_messages(thread_id, user_id)
-            if llm_messages is None:
-                return
-            
             response_chunks = await self._llm_service.get_completion_streamed(
                 api_key=api_key,
                 model=model_name,
