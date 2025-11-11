@@ -66,7 +66,7 @@ class TaskStepExecutionService:
         
         context = self._build_step_context(task, step)
         
-        messages = [LlmMessage(role="user", content=context)]
+        messages = [LlmMessage(role="user", content=context, additional_data={})]
         
         response = await self.llm_service.get_completion(
             api_key=api_key,
@@ -136,7 +136,7 @@ class TaskStepExecutionService:
         next_steps = [s for s in all_steps if s.step_number == next_step_number]
         
         if next_steps:
-            return [WorkQueueItem.make_task_step_execution_item(task, next_steps[0].id, api_key)]
+            return [WorkQueueItem.make_task_step_execution_item(task, next_steps[0].id, api_key)], False
         else:
             return [], all(s.status == StepStatus.COMPLETED for s in all_steps)
         
