@@ -53,7 +53,13 @@ Example: [{{"prompt": "Research X", "complexity": "low", "required_capabilities"
 
 # Task step execution context template
 # Template variables: {task_title_or_prompt}, {previous_steps}, {step_number}, {step_prompt}
-TASK_STEP_CONTEXT_TEMPLATE = """Task: {task_title_or_prompt}
+TASK_STEP_CONTEXT_TEMPLATE = """
+Please complete the next step in the task, based on previous completed steps and their outputs.
+The result of this step should be returned in the "output" field of "additional_data" in the response. 
+This output should be independent of the rest of the response, and not reference it.
+The rest of the response can contain reasoning, justifications, or anything else, or it can be skipped entirely (in which case only the "output" field should be returned).
+
+Task: {task_title_or_prompt}
 
 {previous_steps}
 Current step (Step {step_number}):
@@ -70,7 +76,9 @@ Output: {step_output}
 
 # Concise output of a task step
 TASK_STEP_OUTPUT_DESCRIPTION = (
-    "Concise result of this step that can be used by subsequent steps, or shown to the user if this is the final step. "
-    "Include all essential information, without referencing the rest of the response."
+    "Result of this step that can be used by subsequent steps, or shown to the user if this is the final step. "
+    "Include all essential information, without referencing the rest of the response. "
+    "The output should be independent of the rest of the response, and not reference it. "
+    "It should not include information that is not necessary for the next step or the user (e.g. reasoning, excessive justifications, etc.)."
 )
 
