@@ -17,6 +17,11 @@ from app.models.chat.models import (
 from app.services.llm_service import LlmMessage, LlmService
 from app.services.sse_service import SseService
 from app.events.thread_created import thread_created
+from prompts.chat_prompts import (
+    CHAT_SYSTEM_MESSAGE_TEMPLATE,
+    CHAT_TITLE_DESCRIPTION,
+    CHAT_DESCRIPTION_DESCRIPTION,
+)
 
 
 class ChatService:
@@ -115,9 +120,9 @@ class ChatService:
         return [
             LlmMessage(
                 role="system",
-                content=(
-                    f"You are a helpful assistant that can help with tasks and questions."
-                    f" Current conversation title: {(thread.title or "[Not set]")}. Current conversation description: {(thread.description or "[Not set]")}."
+                content=CHAT_SYSTEM_MESSAGE_TEMPLATE.format(
+                    title=thread.title or "[Not set]",
+                    description=thread.description or "[Not set]",
                 ),
                 additional_data={},
             ),
@@ -137,8 +142,8 @@ class ChatService:
                 model=model_name,
                 messages=self._prepare_llm_messages(thread_id, user_id),
                 additional_requested_data={
-                    "title": "Title of the conversation. Only return this field if the title should be set/updated. If current title is appropriate, do not return this field.",
-                    "description": "Description of the conversation. Only return this field if the description should be set/updated. If current description is appropriate, do not return this field.",
+                    "title": CHAT_TITLE_DESCRIPTION,
+                    "description": CHAT_DESCRIPTION_DESCRIPTION,
                 },
                 temperature=0.7,
             )
@@ -189,8 +194,8 @@ class ChatService:
                 model=model_name,
                 messages=llm_messages,
                 additional_requested_data={
-                    "title": "Title of the conversation. Only return this field if the title should be set/updated. If current title is appropriate, do not return this field.",
-                    "description": "Description of the conversation. Only return this field if the description should be set/updated. If current description is appropriate, do not return this field.",
+                    "title": CHAT_TITLE_DESCRIPTION,
+                    "description": CHAT_DESCRIPTION_DESCRIPTION,
                 },
                 temperature=0.7,
             )

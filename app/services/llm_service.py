@@ -5,6 +5,7 @@ import httpx
 
 from app.models.model.models import ModelDescription, ModelPricing, ModelArchitecture
 from app.services.llm_service_base import LlmService, StreamedChunk, LlmMessage
+from prompts.llm_base_prompts import BASE_SYSTEM_MESSAGE, ADDITIONAL_DATA_INSTRUCTIONS_TEMPLATE
 
 
 # TODO: Handle API errors related to API key (incorrect, no credits, etc.) and return 422 from API
@@ -16,24 +17,14 @@ class OpenRouterLlmService(LlmService):
     
     def _build_system_message(self, additional_requested_data: dict[str, str] | None) -> str:
         """Build system message with instructions for additional data format"""
-        base_message = "You are a helpful assistant."
-        
         if additional_requested_data:
-            data_instructions = "\n\nWhen responding, you may include additional structured data using the following format:\n"
-            data_instructions += "<additional_data key=[NAME]>[VALUE]</additional_data>\n"
-            data_instructions += "[KEY] should be substituted by the name of additional data field (without square brackets).\n"
-            data_instructions += "Example:\n"
-            data_instructions += "\t<additional_data key=conversation_title>Counting 'R's in 'strawberry'</additional_data>\n"
-            data_instructions += "Only include additional data that was requested in this prompt.\n"
-            data_instructions += "All additional data fields should be included in the response, unless otherwise specified by their description.\n"
-            data_instructions += "All additional data values should be plain text, unless otherwise specified.\n\n"
-            data_instructions += "Additional data requested:\n"
+            data_instructions = ADDITIONAL_DATA_INSTRUCTIONS_TEMPLATE
             for key, description in additional_requested_data.items():
                 data_instructions += f'{key}: {description}\n'
             
-            return base_message + data_instructions
+            return BASE_SYSTEM_MESSAGE + data_instructions
         
-        return base_message
+        return BASE_SYSTEM_MESSAGE
     
     def _parse_additional_data(self, content: str) -> tuple[str, dict[str, str]]:
         """Extract additional data tags from content and return cleaned content + data dict"""

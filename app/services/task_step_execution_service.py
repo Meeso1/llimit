@@ -8,6 +8,7 @@ from app.models.task.work_queue import WorkQueueItem
 from app.services.llm_service_base import LlmService, LlmMessage
 from app.services.sse_service import SseService
 from app.services.task_model_selection_service import TaskModelSelectionService
+from prompts.task_prompts import TASK_STEP_OUTPUT_DESCRIPTION
 
 
 class TaskStepExecutionService:
@@ -73,7 +74,7 @@ class TaskStepExecutionService:
             model=step.model_name or "google/gemini-2.5-flash-lite",
             messages=messages,
             additional_requested_data={
-                "output": "Concise result of this step that can be used by subsequent steps, or shown to the user if this is the final step. Include all essential information, without referencing the rest of the response."
+                "output": TASK_STEP_OUTPUT_DESCRIPTION
             },
             temperature=0.7,
         )

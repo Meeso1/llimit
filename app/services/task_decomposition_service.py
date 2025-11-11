@@ -8,6 +8,11 @@ from app.services.sse_service import SseService
 from app.models.task.models import TaskDecompositionResult, TaskStepDefinition
 from app.models.task.work_queue import WorkQueueItem, WorkItemType
 from app.models.task.enums import ComplexityLevel, ModelCapability
+from prompts.task_prompts import (
+    TASK_DECOMPOSITION_PROMPT_TEMPLATE,
+    TASK_TITLE_DESCRIPTION,
+    TASK_STEPS_DESCRIPTION_TEMPLATE,
+)
 
 
 class TaskDecompositionError(Exception):
@@ -74,7 +79,7 @@ class TaskDecompositionService:
             model="google/gemini-2.5-pro",
             messages=self._build_messages(user_prompt),
             additional_requested_data={
-                "title": "A concise title (3-8 words) that summarizes the task",
+                "title": TASK_TITLE_DESCRIPTION,
                 "steps": self._build_steps_description(),
             },
             temperature=0.7,
@@ -137,38 +142,11 @@ class TaskDecompositionService:
         complexity_levels = ", ".join([f'"{level.value}"' for level in ComplexityLevel])
         capabilities = ", ".join([f'"{cap.value}"' for cap in ModelCapability])
         
-        content = f"""You are a task decomposition assistant. Your goal is to break down complex user tasks into a series of sequential steps that can be executed independently by different AI models.
-
-When decomposing a task, follow these guidelines:
-1. Break the task into clear, sequential steps
-2. Each step should be self-contained and actionable
-3. For each step, specify:
-   - A clear prompt that describes what needs to be done
-   - The complexity level: {complexity_levels}
-   - Required model capabilities (only specify if actually needed): {capabilities}
-4. The final step's output will be treated as the final output of the task, and will be shown to the user. This means that usually it's a good idea for the last step to summarize and combine all necessary information from previous steps.
-
-Important notes about step execution:
-- When a step is executed, all previous steps' prompts and outputs will be automatically provided to the model
-- Steps can naturally reference previous steps (e.g., "use the information from step 3", "based on the previous analysis")
-- Later steps can build upon earlier outputs without special syntax
-
-Simple tasks:
-- If the task is simple and doesn't require multiple steps, return a single step representing the entire task
-- The prompt can either be the same as the user's request, or rephrased to be clearer and more actionable for an LLM
-
-Example (multi-step):
-If I ask to "research the population of France and then create a comparison chart with Germany":
-- Step 1: "Find the current population of France" (complexity: low, capabilities: [web_search])
-- Step 2: "Find the current population of Germany" (complexity: low, capabilities: [web_search])
-- Step 3: "Create a comparison chart showing the populations of France and Germany based on the previous findings" (complexity: medium, capabilities: [])
-
-Example (simple task):
-If I ask to "write a poem about cats":
-- Step 1: "Write a creative and engaging poem about cats" (complexity: low, capabilities: [])
-
-Now, please decompose this task:
-{user_prompt}"""
+        content = TASK_DECOMPOSITION_PROMPT_TEMPLATE.format(
+            complexity_levels=complexity_levels,
+            capabilities=capabilities,
+            user_prompt=user_prompt,
+        )
         
         return [LlmMessage(role="user", content=content, additional_data={})]
 
@@ -176,9 +154,7 @@ Now, please decompose this task:
         complexity_levels = ", ".join([f'"{level.value}"' for level in ComplexityLevel])
         capabilities = ", ".join([f'"{cap.value}"' for cap in ModelCapability])
         
-        return f"""JSON array of step objects. Each object must have:
-- "prompt": string describing the step task (can reference previous steps naturally, e.g. "analyze the results from step 2")
-- "complexity": string, one of: {complexity_levels}
-- "required_capabilities": array of strings from: {capabilities} (only include capabilities that are actually needed; can be empty array if no special capabilities required)
-
-Example: [{{"prompt": "Research X", "complexity": "low", "required_capabilities": ["web_search"]}}, {{"prompt": "Analyze the research findings", "complexity": "medium", "required_capabilities": []}}]"""
+        return TASK_STEPS_DESCRIPTION_TEMPLATE.format(
+            complexity_levels=complexity_levels,
+            capabilities=capabilities,
+        )
