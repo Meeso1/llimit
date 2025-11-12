@@ -27,6 +27,8 @@ from prompts.task_prompts import (
     TASK_REEVALUATION_STEPS_DESCRIPTION_TEMPLATE,
     TASK_PREVIOUS_STEP_FORMAT,
     TASK_REEVALUATE_STEP_FORMAT,
+    TASK_ABANDONED_STEP_FORMAT,
+    TASK_ABANDONED_STEPS_SECTION_TEMPLATE,
 )
 
 
@@ -139,6 +141,7 @@ class TaskDecompositionService:
             task=task,
             reevaluate_step=reevaluate_step,
             previous_steps=completed_steps_before,
+            all_steps=all_steps,
             api_key=api_key,
         )
         
@@ -232,14 +235,18 @@ class TaskDecompositionService:
         task: Task,
         reevaluate_step: ReevaluateTaskStep,
         previous_steps: list[TaskStep],
+        all_steps: list[TaskStep],
         api_key: str,
     ) -> list[TaskStepDefinition]:
         """Reevaluate a task based on previous steps and generate new steps"""
+        # Get steps that will be abandoned (steps after the reevaluation step)
+        abandoned_steps = [s for s in all_steps if s.step_number > reevaluate_step.step_number]
+        
         # Determine if this is a planned reevaluation or a failure-triggered one
         if reevaluate_step.is_planned:
-            messages = self._build_planned_reevaluation_messages(task, reevaluate_step, previous_steps)
+            messages = self._build_planned_reevaluation_messages(task, reevaluate_step, previous_steps, abandoned_steps)
         else:
-            messages = self._build_failure_reevaluation_messages(task, reevaluate_step, previous_steps)
+            messages = self._build_failure_reevaluation_messages(task, reevaluate_step, previous_steps, abandoned_steps)
         
         response = await self.llm_service.get_completion(
             api_key=api_key,
@@ -253,11 +260,28 @@ class TaskDecompositionService:
         
         return self._parse_reevaluation_response(response)
     
+    def _build_abandoned_steps_context(self, abandoned_steps: list[TaskStep]) -> str:
+        """Build the abandoned steps context section for reevaluation prompts"""
+        if not abandoned_steps:
+            return ""
+        
+        abandoned_steps_list = ""
+        for step in abandoned_steps:
+            abandoned_steps_list += TASK_ABANDONED_STEP_FORMAT.format(
+                step_number=step.step_number + 1,
+                step_prompt=step.prompt,
+            )
+        
+        return TASK_ABANDONED_STEPS_SECTION_TEMPLATE.format(
+            abandoned_steps_list=abandoned_steps_list
+        )
+    
     def _build_planned_reevaluation_messages(
         self, 
         task: Task, 
         reevaluate_step: ReevaluateTaskStep,
         previous_steps: list[TaskStep],
+        abandoned_steps: list[TaskStep],
     ) -> list[LlmMessage]:
         """Build messages for a planned reevaluation step"""
         complexity_levels = ", ".join([f'"{level.value}"' for level in ComplexityLevel])
@@ -280,10 +304,14 @@ class TaskDecompositionService:
             step_prompt=reevaluate_step.prompt,
         )
         
+        # Build abandoned steps context
+        abandoned_steps_text = self._build_abandoned_steps_context(abandoned_steps)
+        
         content = TASK_REEVALUATION_PROMPT_TEMPLATE.format(
             original_prompt=task.prompt,
             task_title=task.title or "[No title]",
             previous_steps=previous_steps_text,
+            abandoned_steps=abandoned_steps_text,
             complexity_levels=complexity_levels,
             capabilities=capabilities,
         )
@@ -295,6 +323,7 @@ class TaskDecompositionService:
         task: Task, 
         reevaluate_step: ReevaluateTaskStep,
         previous_steps: list[TaskStep],
+        abandoned_steps: list[TaskStep],
     ) -> list[LlmMessage]:
         """Build messages for a failure-triggered reevaluation step"""
         complexity_levels = ", ".join([f'"{level.value}"' for level in ComplexityLevel])
@@ -326,12 +355,16 @@ class TaskDecompositionService:
         if failed_step.output:
             failed_step_info += f"\nPartial output: {failed_step.output}"
         
+        # Build abandoned steps context
+        abandoned_steps_text = self._build_abandoned_steps_context(abandoned_steps)
+        
         content = TASK_FAILURE_REEVALUATION_PROMPT_TEMPLATE.format(
             original_prompt=task.prompt,
             task_title=task.title or "[No title]",
             previous_steps=previous_steps_text,
             failed_step_info=failed_step_info,
             failure_reason=reevaluate_step.prompt,
+            abandoned_steps=abandoned_steps_text,
             complexity_levels=complexity_levels,
             capabilities=capabilities,
         )

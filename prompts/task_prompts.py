@@ -93,6 +93,16 @@ Output: {step_output}
 TASK_REEVALUATE_STEP_FORMAT = """Step {step_number} (Reevaluate): {step_prompt}
 """
 
+# Format for abandoned step in context
+# Template variables: {step_number}, {step_prompt}
+TASK_ABANDONED_STEP_FORMAT = """Step {step_number}: {step_prompt}
+"""
+
+# Format for abandoned steps section in reevaluation prompts
+# Template variables: {abandoned_steps_list}
+TASK_ABANDONED_STEPS_SECTION_TEMPLATE = """Original planned steps (these will be replaced by the steps you generate):
+{abandoned_steps_list}"""
+
 # Additional data descriptions for task step execution
 
 # Concise output of a task step
@@ -111,13 +121,15 @@ TASK_STEP_FAILURE_REASON_DESCRIPTION = (
 )
 
 # Task reevaluation prompt template
-# Template variables: {original_prompt}, {task_title}, {previous_steps}, {complexity_levels}, {capabilities}
+# Template variables: {original_prompt}, {task_title}, {previous_steps}, {abandoned_steps}, {complexity_levels}, {capabilities}
 TASK_REEVALUATION_PROMPT_TEMPLATE = """You are reevaluating a task's execution plan based on the results of previous steps.
 
 Original task prompt: {original_prompt}
 Task title: {task_title}
 
 {previous_steps}
+
+{abandoned_steps}
 
 Based on the task, the title, and the results so far, generate a new sequence of steps to complete the remaining work.
 Follow these guidelines:
@@ -141,7 +153,7 @@ Note: If you include a "reevaluate" step, avoid putting additional steps after i
 Generate the new steps to complete the task based on what has been accomplished so far."""
 
 # Task failure-triggered reevaluation prompt template
-# Template variables: {original_prompt}, {task_title}, {previous_steps}, {failed_step_info}, {complexity_levels}, {capabilities}
+# Template variables: {original_prompt}, {task_title}, {previous_steps}, {failed_step_info}, {failure_reason}, {abandoned_steps}, {complexity_levels}, {capabilities}
 TASK_FAILURE_REEVALUATION_PROMPT_TEMPLATE = """You are reevaluating a task's execution plan because a step could not be completed as originally planned.
 
 Original task prompt: {original_prompt}
@@ -153,6 +165,8 @@ Task title: {task_title}
 
 The step failed for the following reason:
 {failure_reason}
+
+{abandoned_steps}
 
 Based on this failure and the results so far, generate a new sequence of steps to complete the remaining work.
 You should address the cause of the failure and adjust the plan accordingly.
