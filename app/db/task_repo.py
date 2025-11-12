@@ -47,6 +47,7 @@ def _create_task_steps_table() -> str:
             model_name TEXT,
             response_content TEXT,
             output TEXT,
+            failure_reason TEXT,
             started_at TEXT,
             completed_at TEXT,
             FOREIGN KEY (task_id) REFERENCES tasks(id)
@@ -207,7 +208,7 @@ class TaskRepo:
         
         query = """
             SELECT id, task_id, step_number, prompt, status, step_type, step_details,
-                   model_name, response_content, output, started_at, completed_at
+                   model_name, response_content, output, failure_reason, started_at, completed_at
             FROM task_steps
             WHERE task_id = ?
         """
@@ -231,6 +232,7 @@ class TaskRepo:
         model_name: str | None = None,
         response_content: str | None = None,
         output: str | None = None,
+        failure_reason: str | None = None,
         started_at: datetime | None = None,
         completed_at: datetime | None = None,
     ) -> TaskStep | None:
@@ -253,6 +255,10 @@ class TaskRepo:
             updates.append("output = ?")
             params.append(output)
         
+        if failure_reason is not None:
+            updates.append("failure_reason = ?")
+            params.append(failure_reason)
+        
         if started_at is not None:
             updates.append("started_at = ?")
             params.append(started_at.isoformat())
@@ -264,7 +270,7 @@ class TaskRepo:
         if not updates:
             rows = self.db.execute_query(
                 """SELECT id, task_id, step_number, prompt, status, step_type, step_details,
-                          model_name, response_content, output, started_at, completed_at
+                          model_name, response_content, output, failure_reason, started_at, completed_at
                    FROM task_steps WHERE id = ?""",
                 (step_id,),
             )
@@ -279,7 +285,7 @@ class TaskRepo:
         
         rows = self.db.execute_query(
             """SELECT id, task_id, step_number, prompt, status, step_type, step_details,
-                      model_name, response_content, output, started_at, completed_at
+                      model_name, response_content, output, failure_reason, started_at, completed_at
                FROM task_steps WHERE id = ?""",
             (step_id,),
         )
@@ -303,7 +309,7 @@ class TaskRepo:
         rows = self.db.execute_query(
             """
             SELECT id, task_id, step_number, prompt, status, step_type, step_details,
-                   model_name, response_content, output, started_at, completed_at
+                   model_name, response_content, output, failure_reason, started_at, completed_at
             FROM task_steps
             WHERE id = ?
             """,
@@ -339,9 +345,10 @@ class TaskRepo:
                 required_capabilities=capabilities,
                 model_name=row["model_name"],
                 output=row["output"],
+                failure_reason=row["failure_reason"],
             )
         elif step_type == StepType.REEVALUATE:
-            return ReevaluateTaskStep(**common_fields)
+            return ReevaluateTaskStep(**common_fields, is_planned=step_details["is_planned"])
         else:
             raise ValueError(f"Unknown step type: {step_type}")
     
@@ -393,6 +400,45 @@ class TaskRepo:
         
         return created_steps
     
+    def create_reevaluation_step(
+        self,
+        task_id: str,
+        step_number: int,
+        prompt: str,
+        is_planned: bool,
+    ) -> TaskStep:
+        """Create a new reevaluation step"""
+        step_def = ReevaluateTaskStepDefinition(
+            prompt=prompt,
+            step_type=StepType.REEVALUATE,
+            is_planned=is_planned,
+        )
+        step_details = self._serialize_step_details(step_def)
+        step_id = str(uuid4())
+        
+        self.db.execute_update(
+            """
+            INSERT INTO task_steps 
+            (id, task_id, step_number, prompt, status, step_type, step_details)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                step_id,
+                task_id,
+                step_number,
+                prompt,
+                StepStatus.PENDING.value,
+                StepType.REEVALUATE.value,
+                step_details,
+            ),
+        )
+        
+        step = self.get_step_by_id(step_id)
+        if not step:
+            raise ValueError(f"Failed to create reevaluation step {step_id}")
+        
+        return step
+    
     def _serialize_step_details(self, step_def: TaskStepDefinition) -> str:
         """Serialize type-specific step details to JSON"""
         if isinstance(step_def, NormalTaskStepDefinition):
@@ -401,6 +447,8 @@ class TaskRepo:
                 "required_capabilities": [cap.value for cap in step_def.required_capabilities],
             })
         elif isinstance(step_def, ReevaluateTaskStepDefinition):
-            return json.dumps({})
+            return json.dumps({
+                "is_planned": step_def.is_planned,
+            })
         else:
             raise ValueError(f"Unknown step definition type: {type(step_def)}")

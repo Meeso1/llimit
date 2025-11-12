@@ -56,6 +56,7 @@ class NormalTaskStep(TaskStep):
     required_capabilities: list[ModelCapability]
     model_name: str | None
     output: str | None
+    failure_reason: str | None
 
     def to_response(self) -> TaskStepResponse:
         return TaskStepResponse(
@@ -70,6 +71,8 @@ class NormalTaskStep(TaskStep):
             model_name=self.model_name,
             response_content=self.response_content,
             output=self.output,
+            failure_reason=self.failure_reason,
+            is_planned=None,
             started_at=self.started_at,
             completed_at=self.completed_at,
         )
@@ -78,6 +81,7 @@ class NormalTaskStep(TaskStep):
 @dataclass
 class ReevaluateTaskStep(TaskStep):
     """Reevaluation step that generates new steps"""
+    is_planned: bool
 
     def to_response(self) -> TaskStepResponse:
         return TaskStepResponse(
@@ -92,6 +96,8 @@ class ReevaluateTaskStep(TaskStep):
             model_name=None,
             response_content=self.response_content,
             output=None,
+            failure_reason=None,
+            is_planned=self.is_planned,
             started_at=self.started_at,
             completed_at=self.completed_at,
         )
@@ -114,7 +120,7 @@ class NormalTaskStepDefinition(TaskStepDefinition):
 @dataclass
 class ReevaluateTaskStepDefinition(TaskStepDefinition):
     """Definition for reevaluation steps"""
-    pass
+    is_planned: bool
 
 
 @dataclass

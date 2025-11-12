@@ -9,7 +9,7 @@ from app.models.task.work_queue import WorkQueueItem
 from app.services.llm_service_base import LlmService, LlmMessage
 from app.services.sse_service import SseService
 from app.services.task_model_selection_service import TaskModelSelectionService
-from prompts.task_prompts import TASK_STEP_OUTPUT_DESCRIPTION
+from prompts.task_prompts import TASK_STEP_OUTPUT_DESCRIPTION, TASK_STEP_FAILURE_REASON_DESCRIPTION
 
 
 class TaskStepExecutionError(Exception):
@@ -31,6 +31,21 @@ class TaskStepExecutionService:
         self.sse_service = sse_service
         self.model_selection_service = model_selection_service
     
+    def _ensure_step_is_normal(self, step: TaskStep) -> NormalTaskStep:
+        """Ensure the step is a normal step, raise error otherwise"""
+        if step.step_type == StepType.REEVALUATE:
+            raise TaskStepExecutionError(
+                f"Step {step.id} is a reevaluate step and should not be passed to execute_step. "
+                "Reevaluate steps are handled by the decomposition service."
+            )
+        
+        if not isinstance(step, NormalTaskStep):
+            raise TaskStepExecutionError(
+                f"Step {step.id} is not a normal step (type: {step.step_type})"
+            )
+        
+        return step
+    
     async def execute_step(
         self,
         step_id: str,
@@ -43,18 +58,9 @@ class TaskStepExecutionService:
         Should only be called for normal steps.
         """
         step = not_none(self.task_repo.get_step_by_id(step_id), f"Step {step_id}")
+        step = self._ensure_step_is_normal(step)
+        
         task = not_none(self.task_repo.get_task_by_id(task_id, user_id), f"Task {task_id}")
-        
-        if step.step_type == StepType.REEVALUATE:
-            raise TaskStepExecutionError(
-                f"Step {step_id} is a reevaluate step and should not be passed to execute_step. "
-                "Reevaluate steps are handled by the decomposition service."
-            )
-        
-        if not isinstance(step, NormalTaskStep):
-            raise TaskStepExecutionError(
-                f"Step {step_id} is not a normal step (type: {step.step_type})"
-            )
         
         # Normal step execution
         if step.model_name is None:
@@ -98,18 +104,27 @@ class TaskStepExecutionService:
             model=step.model_name or "google/gemini-2.5-flash-lite",
             messages=messages,
             additional_requested_data={
-                "output": TASK_STEP_OUTPUT_DESCRIPTION
+                "output": TASK_STEP_OUTPUT_DESCRIPTION,
+                "failure_reason": TASK_STEP_FAILURE_REASON_DESCRIPTION,
             },
             temperature=0.7,
         )
         
         output = response.additional_data.get("output", "")
+        failure_reason = response.additional_data.get("failure_reason", "").strip()
+        
+        # Determine status based on whether the step failed
+        if failure_reason:
+            status = StepStatus.COULD_NOT_COMPLETE
+        else:
+            status = StepStatus.COMPLETED
         
         self.task_repo.update_task_step(
             step_id=step.id,
-            status=StepStatus.COMPLETED,
+            status=status,
             response_content=response.content,
             output=output,
+            failure_reason=failure_reason if failure_reason else None,
             completed_at=datetime.now(timezone.utc),
         )
         
@@ -120,6 +135,11 @@ class TaskStepExecutionService:
             event=create_task_step_completed_event(task, updated_step),
         )
         
+        # If step failed, create a reevaluation step
+        if failure_reason:
+            return await self._handle_step_failure(task, updated_step, failure_reason, api_key)
+        
+        # Otherwise, proceed normally
         updated_all_steps = not_none(
             self.task_repo.get_steps_by_task_id(task.id, task.user_id, exclude_abandoned=True),
             f"Steps for task {task.id}"
@@ -129,6 +149,23 @@ class TaskStepExecutionService:
             await self._handle_task_completion(task, updated_all_steps)
                 
         return next_items
+    
+    async def _handle_step_failure(
+        self,
+        task: Task,
+        failed_step: TaskStep,
+        failure_reason: str,
+        api_key: str,
+    ) -> list[WorkQueueItem]:
+        """Handle a step failure by creating a reevaluation step"""
+        reevaluation_step = self.task_repo.create_reevaluation_step(
+            task_id=task.id,
+            step_number=failed_step.step_number,
+            prompt=failure_reason,
+            is_planned=False,
+        )
+        
+        return [WorkQueueItem.make_task_reevaluation_item(task, reevaluation_step.id, api_key)]
     
     def _build_step_context(self, task: Task, step: TaskStep, all_steps: list[TaskStep]) -> str:
         """Build context for step execution from task and previous steps"""

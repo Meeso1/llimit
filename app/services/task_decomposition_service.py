@@ -13,6 +13,8 @@ from app.models.task.models import (
     ReevaluateTaskStepDefinition,
     Task,
     TaskStep,
+    NormalTaskStep,
+    ReevaluateTaskStep,
 )
 from app.models.task.work_queue import WorkQueueItem
 from app.models.task.enums import ComplexityLevel, ModelCapability, StepStatus, StepType
@@ -21,6 +23,7 @@ from prompts.task_prompts import (
     TASK_TITLE_DESCRIPTION,
     TASK_STEPS_DESCRIPTION_TEMPLATE,
     TASK_REEVALUATION_PROMPT_TEMPLATE,
+    TASK_FAILURE_REEVALUATION_PROMPT_TEMPLATE,
     TASK_REEVALUATION_STEPS_DESCRIPTION_TEMPLATE,
     TASK_PREVIOUS_STEP_FORMAT,
     TASK_REEVALUATE_STEP_FORMAT,
@@ -41,6 +44,20 @@ class TaskDecompositionService:
         self.llm_service = llm_service
         self.task_repo = task_repo
         self.sse_service = sse_service
+    
+    def _ensure_step_is_reevaluate(self, step: TaskStep) -> ReevaluateTaskStep:
+        """Ensure the step is a reevaluate step, raise error otherwise"""
+        if step.step_type != StepType.REEVALUATE:
+            raise TaskDecompositionError(
+                f"Step {step.id} is not a reevaluate step (type: {step.step_type})"
+            )
+        
+        if not isinstance(step, ReevaluateTaskStep):
+            raise TaskDecompositionError(
+                f"Step {step.id} is not a ReevaluateTaskStep instance"
+            )
+        
+        return step
     
     async def decompose_and_queue_task(
         self,
@@ -86,21 +103,25 @@ class TaskDecompositionService:
         """
         Reevaluate a task after a reevaluate step, update DB, emit events, and return next work items to queue.
         """
-        task = not_none(self.task_repo.get_task_by_id(task_id, user_id), f"Task {task_id}")
-        reevaluate_step = not_none(self.task_repo.get_step_by_id(step_id), f"Step {step_id}")
+        step = not_none(self.task_repo.get_step_by_id(step_id), f"Step {step_id}")
+        reevaluate_step = self._ensure_step_is_reevaluate(step)
         
-        if reevaluate_step.step_type != StepType.REEVALUATE:
-            raise TaskDecompositionError(
-                f"Step {step_id} is not a reevaluate step (type: {reevaluate_step.step_type})"
-            )
+        task = not_none(self.task_repo.get_task_by_id(task_id, user_id), f"Task {task_id}")
         
         all_steps = not_none(
             self.task_repo.get_steps_by_task_id(task.id, user_id, exclude_abandoned=True),
             f"Steps for task {task.id}"
         )
         
-        steps_before = [s for s in all_steps if s.step_number < reevaluate_step.step_number]
-        incomplete_steps = [s for s in steps_before if s.status != StepStatus.COMPLETED]
+        # For failure-triggered reevaluation, include the step with the same step_number (the failed step)
+        # For planned reevaluation, only include steps before
+        if reevaluate_step.is_planned:
+            steps_before = [s for s in all_steps if s.step_number < reevaluate_step.step_number]
+        else:
+            steps_before = [s for s in all_steps if s.step_number <= reevaluate_step.step_number and s.id != reevaluate_step.id]
+        
+        # Check that all non-failed steps are completed
+        incomplete_steps = [s for s in steps_before if s.status not in (StepStatus.COMPLETED, StepStatus.COULD_NOT_COMPLETE)]
         if incomplete_steps:
             raise TaskDecompositionError(
                 f"Cannot reevaluate: {len(incomplete_steps)} step(s) before reevaluation are not completed"
@@ -209,15 +230,21 @@ class TaskDecompositionService:
     async def reevaluate_task(
         self,
         task: Task,
-        reevaluate_step: TaskStep,
+        reevaluate_step: ReevaluateTaskStep,
         previous_steps: list[TaskStep],
         api_key: str,
     ) -> list[TaskStepDefinition]:
         """Reevaluate a task based on previous steps and generate new steps"""
+        # Determine if this is a planned reevaluation or a failure-triggered one
+        if reevaluate_step.is_planned:
+            messages = self._build_planned_reevaluation_messages(task, reevaluate_step, previous_steps)
+        else:
+            messages = self._build_failure_reevaluation_messages(task, reevaluate_step, previous_steps)
+        
         response = await self.llm_service.get_completion(
             api_key=api_key,
             model="google/gemini-2.5-pro",
-            messages=self._build_reevaluation_messages(task, reevaluate_step, previous_steps),
+            messages=messages,
             additional_requested_data={
                 "steps": self._build_reevaluation_steps_description(),
             },
@@ -226,12 +253,13 @@ class TaskDecompositionService:
         
         return self._parse_reevaluation_response(response)
     
-    def _build_reevaluation_messages(
+    def _build_planned_reevaluation_messages(
         self, 
         task: Task, 
-        reevaluate_step: TaskStep,
-        previous_steps: list[TaskStep]
+        reevaluate_step: ReevaluateTaskStep,
+        previous_steps: list[TaskStep],
     ) -> list[LlmMessage]:
+        """Build messages for a planned reevaluation step"""
         complexity_levels = ", ".join([f'"{level.value}"' for level in ComplexityLevel])
         capabilities = ", ".join([f'"{cap.value}"' for cap in ModelCapability])
         
@@ -256,6 +284,54 @@ class TaskDecompositionService:
             original_prompt=task.prompt,
             task_title=task.title or "[No title]",
             previous_steps=previous_steps_text,
+            complexity_levels=complexity_levels,
+            capabilities=capabilities,
+        )
+        
+        return [LlmMessage(role="user", content=content, additional_data={})]
+    
+    def _build_failure_reevaluation_messages(
+        self, 
+        task: Task, 
+        reevaluate_step: ReevaluateTaskStep,
+        previous_steps: list[TaskStep],
+    ) -> list[LlmMessage]:
+        """Build messages for a failure-triggered reevaluation step"""
+        complexity_levels = ", ".join([f'"{level.value}"' for level in ComplexityLevel])
+        capabilities = ", ".join([f'"{cap.value}"' for cap in ModelCapability])
+        
+        # Build previous steps context (excluding the failed step)
+        previous_steps_text = ""
+        failed_step = None
+        
+        for step in previous_steps:
+            if step.step_number == reevaluate_step.step_number:
+                failed_step = step
+            else:
+                previous_steps_text += TASK_PREVIOUS_STEP_FORMAT.format(
+                    step_number=step.step_number + 1,
+                    step_prompt=step.prompt,
+                    step_output=step.output or "(no output)",
+                )
+        
+        if failed_step is None or not isinstance(failed_step, NormalTaskStep):
+            raise TaskDecompositionError(
+                f"Could not find failed normal step at step number {reevaluate_step.step_number}"
+            )
+        
+        if previous_steps_text:
+            previous_steps_text = "Previous steps and their results:\n" + previous_steps_text
+        
+        failed_step_info = f"Step {failed_step.step_number + 1} (Failed): {failed_step.prompt}"
+        if failed_step.output:
+            failed_step_info += f"\nPartial output: {failed_step.output}"
+        
+        content = TASK_FAILURE_REEVALUATION_PROMPT_TEMPLATE.format(
+            original_prompt=task.prompt,
+            task_title=task.title or "[No title]",
+            previous_steps=previous_steps_text,
+            failed_step_info=failed_step_info,
+            failure_reason=reevaluate_step.prompt,
             complexity_levels=complexity_levels,
             capabilities=capabilities,
         )
@@ -336,6 +412,7 @@ class TaskDecompositionService:
                 steps.append(ReevaluateTaskStepDefinition(
                     prompt=prompt,
                     step_type=step_type,
+                    is_planned=True,
                 ))
             else:
                 raise TaskDecompositionError(f"{step_label} has unknown step_type: {step_type}")

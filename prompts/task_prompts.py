@@ -103,6 +103,13 @@ TASK_STEP_OUTPUT_DESCRIPTION = (
     "It should not include information that is not necessary for the next step or the user (e.g. reasoning, excessive justifications, etc.)."
 )
 
+# Description for failure reason when a step cannot be completed
+TASK_STEP_FAILURE_REASON_DESCRIPTION = (
+    "If this step cannot be completed due to unexpected circumstances (e.g., missing information, "
+    "external dependencies not available, unclear requirements), provide a clear description of why the step failed. "
+    "This should only be provided if the step genuinely cannot be completed. Leave empty if the step was completed successfully."
+)
+
 # Task reevaluation prompt template
 # Template variables: {original_prompt}, {task_title}, {previous_steps}, {complexity_levels}, {capabilities}
 TASK_REEVALUATION_PROMPT_TEMPLATE = """You are reevaluating a task's execution plan based on the results of previous steps.
@@ -132,6 +139,44 @@ For reevaluate steps, only prompt and step_type are needed.
 Note: If you include a "reevaluate" step, avoid putting additional steps after it, as they will be replaced by the reevaluation anyway.
 
 Generate the new steps to complete the task based on what has been accomplished so far."""
+
+# Task failure-triggered reevaluation prompt template
+# Template variables: {original_prompt}, {task_title}, {previous_steps}, {failed_step_info}, {complexity_levels}, {capabilities}
+TASK_FAILURE_REEVALUATION_PROMPT_TEMPLATE = """You are reevaluating a task's execution plan because a step could not be completed as originally planned.
+
+Original task prompt: {original_prompt}
+Task title: {task_title}
+
+{previous_steps}
+
+{failed_step_info}
+
+The step failed for the following reason:
+{failure_reason}
+
+Based on this failure and the results so far, generate a new sequence of steps to complete the remaining work.
+You should address the cause of the failure and adjust the plan accordingly.
+
+Follow these guidelines:
+1. Analyze why the step failed and adjust the approach
+2. Break the remaining work into clear, sequential steps that work around or address the failure
+3. Each step should be self-contained and actionable
+4. For each step, specify:
+   - A clear prompt that describes what needs to be done
+   - The step type: either "normal" for regular execution steps, or "reevaluate" for another reevaluation point (optional, defaults to "normal")
+   
+For normal steps only:
+   - The complexity level: {complexity_levels}
+   - Required model capabilities (only specify if actually needed): {capabilities}
+
+For reevaluate steps, only prompt and step_type are needed.
+
+5. The final step's output will be treated as the final output of the task, and will be shown to the user
+6. Steps can naturally reference previous steps (e.g., "use the information from step 3", "based on the previous analysis")
+
+Note: If you include a "reevaluate" step, avoid putting additional steps after it, as they will be replaced by the reevaluation anyway.
+
+Generate the new steps to address the failure and complete the task."""
 
 # Steps description template for task reevaluation
 # Template variables: {complexity_levels}, {capabilities}

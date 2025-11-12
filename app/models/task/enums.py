@@ -13,7 +13,8 @@ class StepStatus(str, Enum):
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
-    FAILED = "failed"
+    FAILED = "failed"  # Failed due to exception/error
+    COULD_NOT_COMPLETE = "could_not_complete"  # Failed due to model's inability to complete (non-exception)
     ABANDONED = "abandoned"
 
 

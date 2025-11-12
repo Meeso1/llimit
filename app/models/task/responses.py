@@ -33,6 +33,8 @@ class TaskStepResponse(BaseModel):
     model_name: str | None = Field(None, description="The model selected for this step (not applicable for reevaluation steps)")
     response_content: str | None = Field(None, description="The LLM response for this step")
     output: str | None = Field(None, description="Concise output from the step")
+    failure_reason: str | None = Field(None, description="Reason for step failure if the step could not be completed (only for normal steps)")
+    is_planned: bool | None = Field(None, description="Whether this reevaluation was planned or triggered by a step failure (only for reevaluation steps)")
     started_at: datetime | None
     completed_at: datetime | None
 
