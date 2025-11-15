@@ -12,7 +12,7 @@ from app.api.routes.health import router as health_router
 from app.api.routes.models import router as models_router
 from app.api.routes.sse import router as sse_router
 from app.api.routes.task import router as task_router
-from app.core.config import settings
+from app.settings import settings
 
 
 def custom_openapi(app: FastAPI):

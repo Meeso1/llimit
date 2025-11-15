@@ -1,6 +1,6 @@
 from fastapi import HTTPException, status, Request
 
-from app.core.context import RequestContext
+from app.request_context import RequestContext
 from app.services.api_key_service import ApiKeyService
 
 

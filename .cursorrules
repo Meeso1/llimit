@@ -1,0 +1,48 @@
+# General Rules
+
+- **Self-correction**: This `.cursorrules` file should be kept up to date. If you add or remove a component (a directory with a specific purpose), please update the "Project Components" section below.
+- **Docstrings**: Public classes and repository methods should have a brief, one-line docstring. These docstrings should describe the purpose of the class/method, but MUST NOT include argument or return value descriptions. Type hints serve that purpose. Most other code (e.g., in services, API routes) does not require docstrings.
+- **Typing**: All function and method signatures must be fully type-hinted. Use built-in `list`, `dict` etc. instead of `List` or `Dict` from `typing`. Use `<type> | None` instead of `Optional[<type>]`.
+- **Imports**: Imports should be grouped in the following order: standard library, third-party libraries, and then application modules.
+- **Error Handling**: In the API layer, use `HTTPException` for request errors. In the service layer, background tasks or calls to external services should be wrapped in `try...except` blocks to log errors and prevent crashes.
+- **`None` checks**: Use `utils.not_none()` to assert that a value is not `None` in situations where `None` indicates a critical error or inconsistent state. If there are other, similar requirements about some objects (i.e. we expect a value to be of a certain derived type, even though type analysis allows it to be of base type), a function similar to `utils.not_none()` should be introduced to assert them, either as a private function, or in `utils.py`.
+- **File Organization**:
+    - Business logic files (e.g., models, services, repositories) should always reside within a subdirectory corresponding to their feature or domain (e.g., `app/models/chat/`, `app/services/task/`). This applies even if a directory would only contain a single file.
+    - General-purpose or infrastructure files (like `settings.py` or `request_context.py`) should only be grouped into subdirectories if there are multiple, closely related files. Otherwise, they can reside directly in `app/`.
+- **Dependency Management**: This project uses `uv` for dependency management. Install dependencies with `uv pip install -r requirements.txt` and run the application with `uv run`.
+- **Development Server**: Do not start the development server within a Cursor terminal, as it can be difficult to stop. Instead, inform the user that the server needs to be started and wait for them to confirm it is running before proceeding with tasks that require it (like endpoint testing).
+
+# Project Components
+
+This section describes the main components of the project and the rules associated with them.
+
+- **`app/`**: The main application source code. All core logic, API definitions, and data models reside here.
+- **`prompts/`**: Contains prompt templates for interacting with Large Language Models.
+    - **Description**: Files in this directory define string constants for LLM prompts.
+    - **Rules**: Prompts should use f-string or `.format()` style templating.
+- **`request_data/`**: JSON request bodies for API endpoints, for testing.
+    - **Description**: Each file is a JSON object representing a valid request to an endpoint. These are intended for use with tools like `curl` for manual testing (e.g., `curl --data @request_data/create_task.json ...`).
+    - **Rules**: Filenames should clearly map to the endpoint they target. The content of these files is ephemeral and can be modified freely during a development session; there's no need to restore their original state.
+- **`app/api/`**: The web API layer, built with FastAPI.
+    - **Description**: This component defines API routes, handles request validation, and maps requests to service layer calls. Authentication is handled via dependencies that extract user information from request headers.
+    - **Rules**: 
+        - Keep logic minimal. Routers should not contain business logic. Their job is to translate HTTP requests into calls to the service layer and return HTTP responses.
+        - All services should be injectable using FastAPI's dependency injection system. Dependencies should be defined in `app/api/dependencies.py`.
+- **`app/db/`**: The database access layer (repositories).
+    - **Description**: Handles all direct interaction with the database. Repositories are the *only* components that should contain SQL queries.
+    - **Rules**: 
+        - Each repository manages one or a few related database tables.
+        - Table schemas are defined using `CREATE TABLE` statements in functions decorated with `@register_schema_sql`, which are automatically executed on startup to initialize the database.
+        - Do not write database migration code. Assume the database is either non-existent (and will be created) or has an up-to-date schema.
+        - Repositories can be accessed directly by API routes for simple data retrieval, but any business logic should be handled by a service.
+- **`app/events/`**: Definitions for application-level events.
+    - **Description**: Contains small data classes or functions that represent events happening in the system, especially for Server-Sent Events (SSE).
+    - **Rules**: 
+        - Each file should generally define one event.
+        - The `metadata` property of an SSE event is for client-side filtering. Do not include user IDs (as events are scoped to a user) or the ID of a newly created resource (as the client won't know it yet).
+- **`app/models/`**: Data models, including internal domain models and API Data Transfer Objects (DTOs).
+    - **Description**: Defines the shape of data used throughout the application.
+    - **Rules**: Each major domain concept (e.g., `chat`, `task`) should have its own subdirectory. Inside, `requests.py` and `responses.py` are for API DTOs, `models.py` is for internal domain classes, and `enums.py` for enumerations.
+- **`app/services/`**: The business logic layer.
+    - **Description**: This is where the core application logic lives. Services orchestrate data flow and implement business rules. Authentication logic is handled by `AuthService`.
+    - **Rules**: Services call repositories to interact with the database and can call other services to perform complex operations. They should be independent of the API layer.

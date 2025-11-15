@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from app.core.context import RequestContext
+from app.request_context import RequestContext
 from app.db.api_key_repo import ApiKeyRepo
 from app.db.chat_repo import ChatRepo
 from app.db.database import Database
