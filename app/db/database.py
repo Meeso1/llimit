@@ -1,5 +1,12 @@
+import os
 import sqlite3
+from datetime import datetime
 from typing import Any, Callable
+
+from app.settings import settings
+
+
+DB_VERSION = 1
 
 
 class DatabaseNotInitializedError(Exception):
@@ -27,14 +34,13 @@ def register_schema_sql(func: Callable[[], str]) -> Callable[[], str]:
 class Database:
     """SQLite database connection manager with schema registration"""
     
-    # Class-level registry for schema initialization SQL
     _schema_registry: list[str] = []
     
-    def __init__(self, db_path: str = "data/llimit.db") -> None:
-        self.db_path = db_path
+    def __init__(self, db_path: str | None = None) -> None:
+        self.db_path = db_path if db_path is not None else settings.db_path
         self._initialized = False
     
-    def initialize_schema(self) -> None:
+    def _initialize_schema(self) -> None:
         """Initialize database schema by executing all registered SQL
         
         This must be called before using the database. It executes all
@@ -45,6 +51,7 @@ class Database:
         
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            self._set_db_version(cursor)
             
             for sql in self._schema_registry:
                 cursor.execute(sql)
@@ -52,6 +59,60 @@ class Database:
             conn.commit()
         
         self._initialized = True
+
+    def _set_db_version(self, cursor: sqlite3.Cursor) -> None:
+        cursor.execute("CREATE TABLE IF NOT EXISTS db_version (version INTEGER NOT NULL)")
+        cursor.execute("DELETE FROM db_version")
+        cursor.execute("INSERT INTO db_version (version) VALUES (?)", (DB_VERSION,))
+    
+    def _get_db_version(self) -> int | None:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='db_version'"
+            )
+            if cursor.fetchone() is None:
+                return None
+            
+            cursor.execute("SELECT version FROM db_version LIMIT 1")
+            result = cursor.fetchone()
+            return result[0] if result else None
+    
+    def _handle_version_mismatch(self) -> None:
+        """Handle database version mismatch by deleting or renaming the old db file"""
+        if not os.path.exists(self.db_path):
+            return
+        
+        if settings.preserve_old_db:
+            self._backup_db()
+        else:
+            os.remove(self.db_path)
+            print(f"Old database deleted: {self.db_path}")
+
+    def _backup_db(self) -> None:
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        backup_path = self.db_path.replace(".db", f"-{timestamp}.db")
+        if os.path.exists(backup_path):
+            os.remove(self.db_path)
+            print(f"Old database deleted - {backup_path} already exists")
+        else:
+            os.rename(self.db_path, backup_path)
+            print(f"Old database renamed to: {backup_path}")
+    
+    def _check_and_handle_version(self) -> None:
+        """Check database version and handle mismatch if necessary"""
+        if not os.path.exists(self.db_path):
+            return
+        
+        current_version = self._get_db_version()
+        if current_version != DB_VERSION:
+            print(f"Database is not up to date (db version: {current_version}, schema version: {DB_VERSION})")
+            self._handle_version_mismatch()
+    
+    def setup(self) -> None:
+        """Check database version and initialize schema"""
+        self._check_and_handle_version()
+        self._initialize_schema()
     
     def _check_initialized(self) -> None:
         """Check if database has been initialized, raise error if not"""
@@ -82,4 +143,3 @@ class Database:
             cursor.execute(query, params)
             conn.commit()
             return cursor.rowcount
-

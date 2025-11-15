@@ -34,6 +34,7 @@ This section describes the main components of the project and the rules associat
         - Each repository manages one or a few related database tables.
         - Table schemas are defined using `CREATE TABLE` statements in functions decorated with `@register_schema_sql`, which are automatically executed on startup to initialize the database.
         - Do not write database migration code. Assume the database is either non-existent (and will be created) or has an up-to-date schema.
+        - When making any schema changes (adding/removing tables, columns, indexes, etc.), you MUST increment the `DB_VERSION` constant in `app/db/database.py`. This triggers automatic database recreation on startup.
         - Repositories can be accessed directly by API routes for simple data retrieval, but any business logic should be handled by a service.
 - **`app/events/`**: Definitions for application-level events.
     - **Description**: Contains small data classes or functions that represent events happening in the system, especially for Server-Sent Events (SSE).

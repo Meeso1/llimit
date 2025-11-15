@@ -5,6 +5,8 @@ class Settings(BaseSettings):
     app_name: str = "LLimit Gateway"
     app_version: str = "0.1.0"
     api_key: str = "dev-api-key-12345"
+    db_path: str = "data/llimit.db"
+    preserve_old_db: bool = False
     
     class Config:
         env_file = ".env"

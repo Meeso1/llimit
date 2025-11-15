@@ -91,7 +91,7 @@ def create_app() -> FastAPI:
 
 # Initialize database schema before creating app
 database = get_database()
-database.initialize_schema()
+database.setup()
 
 app = create_app()
 
