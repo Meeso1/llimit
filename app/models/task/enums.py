@@ -35,3 +35,14 @@ class ModelCapability(str, Enum):
     NATIVE_WEB_SEARCH = "native_web_search"
     IMAGE_INPUT = "image_input"
     FILE_INPUT = "file_input"
+
+    @staticmethod
+    def descriptions() -> dict[str, str]:
+        """Returns descriptions for each model capability."""
+        return {
+            ModelCapability.REASONING.value: "Internal reasoning/thinking generation before response",
+            ModelCapability.EXA_SEARCH.value: "Web search based on prompt. It is run **BEFORE** LLM is called, and its result is provided to LLM as context.",
+            ModelCapability.NATIVE_WEB_SEARCH.value: "Model-native web search. It can be used by LLM with a generated query. Therefore, it can be used for more specific cases, where search query is different than the prompt.",
+            ModelCapability.IMAGE_INPUT.value: "Image input",
+            ModelCapability.FILE_INPUT.value: "File input",
+        }

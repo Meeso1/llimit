@@ -46,6 +46,11 @@ class TaskDecompositionService:
         self.llm_service = llm_service
         self.task_repo = task_repo
         self.sse_service = sse_service
+
+    def _format_capabilities(self) -> str:
+        """Format capabilities with their descriptions for prompts."""
+        descriptions = ModelCapability.descriptions()
+        return "\n".join([f'- "{cap.value}": {descriptions[cap.value]}' for cap in ModelCapability])
     
     def _ensure_step_is_reevaluate(self, step: TaskStep) -> ReevaluateTaskStep:
         """Ensure the step is a reevaluate step, raise error otherwise"""
@@ -211,7 +216,7 @@ class TaskDecompositionService:
 
     def _build_messages(self, user_prompt: str) -> list[LlmMessage]:
         complexity_levels = ", ".join([f'"{level.value}"' for level in ComplexityLevel])
-        capabilities = ", ".join([f'"{cap.value}"' for cap in ModelCapability])
+        capabilities = self._format_capabilities()
         
         content = TASK_DECOMPOSITION_PROMPT_TEMPLATE.format(
             complexity_levels=complexity_levels,
@@ -223,7 +228,7 @@ class TaskDecompositionService:
 
     def _build_steps_description(self) -> str:
         complexity_levels = ", ".join([f'"{level.value}"' for level in ComplexityLevel])
-        capabilities = ", ".join([f'"{cap.value}"' for cap in ModelCapability])
+        capabilities = self._format_capabilities()
         
         return TASK_STEPS_DESCRIPTION_TEMPLATE.format(
             complexity_levels=complexity_levels,
@@ -285,7 +290,7 @@ class TaskDecompositionService:
     ) -> list[LlmMessage]:
         """Build messages for a planned reevaluation step"""
         complexity_levels = ", ".join([f'"{level.value}"' for level in ComplexityLevel])
-        capabilities = ", ".join([f'"{cap.value}"' for cap in ModelCapability])
+        capabilities = self._format_capabilities()
         
         # Build previous steps context
         previous_steps_text = ""
@@ -327,7 +332,7 @@ class TaskDecompositionService:
     ) -> list[LlmMessage]:
         """Build messages for a failure-triggered reevaluation step"""
         complexity_levels = ", ".join([f'"{level.value}"' for level in ComplexityLevel])
-        capabilities = ", ".join([f'"{cap.value}"' for cap in ModelCapability])
+        capabilities = self._format_capabilities()
         
         # Build previous steps context (excluding the failed step)
         previous_steps_text = ""
@@ -373,7 +378,7 @@ class TaskDecompositionService:
     
     def _build_reevaluation_steps_description(self) -> str:
         complexity_levels = ", ".join([f'"{level.value}"' for level in ComplexityLevel])
-        capabilities = ", ".join([f'"{cap.value}"' for cap in ModelCapability])
+        capabilities = self._format_capabilities()
         
         return TASK_REEVALUATION_STEPS_DESCRIPTION_TEMPLATE.format(
             complexity_levels=complexity_levels,
