@@ -31,6 +31,7 @@ class ComplexityLevel(str, Enum):
 
 class ModelCapability(str, Enum):
     REASONING = "reasoning"
-    WEB_SEARCH = "web_search"
+    EXA_SEARCH = "exa_search"
+    NATIVE_WEB_SEARCH = "native_web_search"
     IMAGE_INPUT = "image_input"
     FILE_INPUT = "file_input"

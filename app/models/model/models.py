@@ -19,6 +19,8 @@ class ModelPricing:
     image: float | None = None  # Cost per image
     audio: float | None = None  # Cost per audio token (per million)
     internal_reasoning: float | None = None  # Cost for reasoning tokens (per million)
+    exa_search: float | None = None  # Cost per 1000 Exa search results
+    native_search: float | None = None  # Cost per 1000 native web search requests
 
     def to_response(self) -> ModelPricingResponse:
         return ModelPricingResponse(
@@ -28,6 +30,8 @@ class ModelPricing:
             image=self.image,
             audio=self.audio,
             internal_reasoning=self.internal_reasoning,
+            exa_search=self.exa_search,
+            native_search=self.native_search,
         )
 
 
@@ -76,11 +80,10 @@ class ModelDescription:
         """Whether the model supports structured output formats"""
         return "structured_outputs" in self.supported_parameters
 
-    # TODO: Add web search detection. The OpenRouter API doesn't provide reliable metadata
-    # for detecting web search capabilities. Some models have 'web_search_options' in
-    # supported_parameters (controllable), some have web_search pricing (charged per use),
-    # and some have built-in grounding (like Gemini) with no API indication.
-    # Will need to maintain a manual list or find another data source.
+    @property
+    def supports_native_web_search(self) -> bool:
+        """Whether the model supports native web search via web_search_options parameter"""
+        return "web_search_options" in self.supported_parameters
 
     def to_response(self) -> ModelDescriptionResponse:
         return ModelDescriptionResponse(
@@ -96,5 +99,6 @@ class ModelDescription:
             supports_reasoning=self.supports_reasoning,
             supports_tools=self.supports_tools,
             supports_structured_outputs=self.supports_structured_outputs,
+            supports_native_web_search=self.supports_native_web_search,
         )
 

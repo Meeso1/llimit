@@ -8,6 +8,8 @@ class ModelPricingResponse(BaseModel):
     image: float | None = None
     audio: float | None = None
     internal_reasoning: float | None = None
+    exa_search: float | None = None
+    native_search: float | None = None
 
 
 class ModelArchitectureResponse(BaseModel):
@@ -32,6 +34,7 @@ class ModelDescriptionResponse(BaseModel):
     supports_reasoning: bool
     supports_tools: bool
     supports_structured_outputs: bool
+    supports_native_web_search: bool
 
 
 class ModelsListResponse(BaseModel):

@@ -1,10 +1,12 @@
 from typing import AsyncGenerator
 from openai import AsyncOpenAI
+from fastapi import HTTPException
 import re
-import httpx
 
-from app.models.model.models import ModelDescription, ModelPricing, ModelArchitecture
+from app.models.model.models import ModelDescription
+from app.models.web_search_config import WebSearchConfig
 from app.services.llm_service_base import LlmService, StreamedChunk, LlmMessage
+from app.services.model_cache_service import ModelCacheService
 from prompts.llm_base_prompts import BASE_SYSTEM_MESSAGE, ADDITIONAL_DATA_INSTRUCTIONS_TEMPLATE
 
 
@@ -12,8 +14,9 @@ from prompts.llm_base_prompts import BASE_SYSTEM_MESSAGE, ADDITIONAL_DATA_INSTRU
 class OpenRouterLlmService(LlmService):
     """OpenRouter implementation of LLM service"""
     
-    def __init__(self) -> None:
+    def __init__(self, model_cache_service: ModelCacheService) -> None:
         self._base_url = "https://openrouter.ai/api/v1"
+        self._model_cache_service = model_cache_service
     
     def _build_system_message(self, additional_requested_data: dict[str, str] | None) -> str:
         """Build system message with instructions for additional data format"""
@@ -25,7 +28,62 @@ class OpenRouterLlmService(LlmService):
             return BASE_SYSTEM_MESSAGE + data_instructions
         
         return BASE_SYSTEM_MESSAGE
-    
+
+    def _build_web_search_config(
+        self,
+        config: WebSearchConfig,
+        model_supports_native: bool,
+    ) -> tuple[list[dict] | None, dict | None]:
+        """
+        Build web search configuration for OpenRouter API.
+        Returns: (plugins_config, web_search_options)
+        """
+        if not config.is_enabled():
+            return None, None
+
+        plugins = None
+        web_search_options = None
+
+        # Determine which engines to use based on config and model support
+        use_exa = config.use_exa_search
+        use_native = config.use_native_search and model_supports_native
+        
+        # If native is requested but not supported, fall back to Exa
+        if config.use_native_search and not model_supports_native:
+            use_exa = True
+
+        # Build configuration based on engines
+        if use_exa:
+            plugins = [{
+                "id": "web",
+                "engine": "exa",
+                "max_results": config.max_results,
+            }]
+            if config.search_prompt:
+                plugins[0]["search_prompt"] = config.search_prompt
+        
+        if use_native:
+            web_search_options = {
+                "search_context_size": config.search_context_size.value,
+            }
+
+        return plugins, web_search_options
+
+    def _build_extra_body(self, web_search_config: WebSearchConfig | None, model_description: ModelDescription) -> dict | None:
+        """Build extra body for OpenRouter API"""
+        if web_search_config is None or not web_search_config.is_enabled():
+            return None
+        
+        plugins, web_search_options = self._build_web_search_config(web_search_config, model_description.supports_native_web_search)
+
+        extra_body = {}
+        if plugins:
+            extra_body["plugins"] = plugins
+        if web_search_options:
+            extra_body["web_search_options"] = web_search_options
+        
+        return extra_body
+
     def _parse_additional_data(self, content: str) -> tuple[str, dict[str, str]]:
         """Extract additional data tags from content and return cleaned content + data dict"""
         additional_data: dict[str, str] = {}
@@ -49,10 +107,16 @@ class OpenRouterLlmService(LlmService):
         messages: list[LlmMessage],
         additional_requested_data: dict[str, str] | None = None,
         temperature: float = 0.7,
+        web_search_config: WebSearchConfig | None = None,
     ) -> LlmMessage:
         """
         Prompt a model and get an answer using OpenRouter.
         """
+        # Validate model and get description
+        model_desc = await self._model_cache_service.get_model_by_id(model)
+        if model_desc is None:
+            raise HTTPException(status_code=404, detail=f"Model '{model}' not found")
+        
         client = AsyncOpenAI(
             base_url=self._base_url,
             api_key=api_key,
@@ -68,11 +132,14 @@ class OpenRouterLlmService(LlmService):
         for msg in messages:
             openai_messages.append({"role": msg.role, "content": msg.content})
         
+        extra_body = self._build_extra_body(web_search_config, model_desc)
+        
         # Make API call
         response = await client.chat.completions.create(
             model=model,
             messages=openai_messages,
             temperature=temperature,
+            extra_body=extra_body,
         )
         
         # Extract response content
@@ -174,10 +241,16 @@ class OpenRouterLlmService(LlmService):
         messages: list[LlmMessage],
         additional_requested_data: dict[str, str] | None = None,
         temperature: float = 0.7,
+        web_search_config: WebSearchConfig | None = None,
     ) -> AsyncGenerator[StreamedChunk, None]:
         """
         Stream completion from OpenRouter, parsing additional data tags on the fly.
         """
+        # Validate model and get description
+        model_desc = await self._model_cache_service.get_model_by_id(model)
+        if model_desc is None:
+            raise HTTPException(status_code=404, detail=f"Model '{model}' not found")
+        
         client = AsyncOpenAI(
             base_url=self._base_url,
             api_key=api_key,
@@ -193,12 +266,15 @@ class OpenRouterLlmService(LlmService):
         for msg in messages:
             openai_messages.append({"role": msg.role, "content": msg.content})
         
+        extra_body = self._build_extra_body(web_search_config, model_desc)
+        
         # Make streaming API call
         stream = await client.chat.completions.create(
             model=model,
             messages=openai_messages,
             temperature=temperature,
             stream=True,
+            extra_body=extra_body,
         )
         
         # Buffer for detecting tags
@@ -246,61 +322,3 @@ class OpenRouterLlmService(LlmService):
                 )
             else:
                 yield StreamedChunk(content=buffer)
-    
-    async def get_models(self, provider: str | None = None) -> list[ModelDescription]:
-        """
-        Get list of available models from OpenRouter.
-        """        
-        async with httpx.AsyncClient() as client:
-            response = await client.get("https://openrouter.ai/api/v1/models")
-            response.raise_for_status()
-            data = response.json()
-        
-        models = []
-        for model_data in data.get("data", []):
-            model_id = model_data.get("id", "")
-            model_provider = model_id.split("/")[0] if "/" in model_id else ""
-            if provider is not None and model_provider != provider:
-                continue
-
-            # Extract pricing information
-            pricing_data = model_data.get("pricing", {})
-            input_cost = float(pricing_data.get("prompt", 0))
-            output_cost = float(pricing_data.get("completion", 0))
-            
-            # OpenRouter returns cost per token, convert to per million
-            pricing = ModelPricing(
-                prompt_per_million=input_cost * 1_000_000,
-                completion_per_million=output_cost * 1_000_000,
-                request=float(pricing_data["request"]) if pricing_data.get("request") and float(pricing_data["request"]) > 0 else None,
-                image=float(pricing_data["image"]) if pricing_data.get("image") and float(pricing_data["image"]) > 0 else None,
-                audio=float(pricing_data["audio"]) * 1_000_000 if pricing_data.get("audio") and float(pricing_data["audio"]) > 0 else None,
-                internal_reasoning=float(pricing_data["internal_reasoning"]) * 1_000_000 if pricing_data.get("internal_reasoning") and float(pricing_data["internal_reasoning"]) > 0 else None,
-            )
-            
-            # Extract architecture information
-            arch_data = model_data.get("architecture", {})
-            architecture = ModelArchitecture(
-                modality=arch_data.get("modality", "text->text"),
-                input_modalities=arch_data.get("input_modalities", ["text"]),
-                output_modalities=arch_data.get("output_modalities", ["text"]),
-                tokenizer=arch_data.get("tokenizer", "Other"),
-            )
-            
-            # Extract provider information
-            top_provider = model_data.get("top_provider", {})
-            is_moderated = top_provider.get("is_moderated", False)
-            
-            models.append(ModelDescription(
-                id=model_id,
-                name=model_data.get("name", model_id),
-                provider=model_provider,
-                description=model_data.get("description", ""),
-                context_length=model_data.get("context_length", 0),
-                architecture=architecture,
-                pricing=pricing,
-                is_moderated=is_moderated,
-                supported_parameters=model_data.get("supported_parameters", []),
-            ))
-        
-        return models

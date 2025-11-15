@@ -3,9 +3,10 @@ from datetime import datetime, timezone
 from app.db.task_repo import TaskRepo
 from utils import not_none
 from app.events.task_events import create_task_step_completed_event, create_task_completed_event
-from app.models.task.enums import TaskStatus, StepStatus, StepType
+from app.models.task.enums import TaskStatus, StepStatus, StepType, ModelCapability
 from app.models.task.models import Task, TaskStep, NormalTaskStep, NormalTaskStepDefinition
 from app.models.task.work_queue import WorkQueueItem
+from app.models.web_search_config import WebSearchConfig, SearchContextSize
 from app.services.llm_service_base import LlmService, LlmMessage
 from app.services.sse_service import SseService
 from app.services.task_model_selection_service import TaskModelSelectionService
@@ -45,6 +46,21 @@ class TaskStepExecutionService:
             )
         
         return step
+
+    def _build_web_search_config(self, step: NormalTaskStep) -> WebSearchConfig:
+        """Build web search configuration based on step's required capabilities"""
+        has_exa = ModelCapability.EXA_SEARCH in step.required_capabilities
+        has_native = ModelCapability.NATIVE_WEB_SEARCH in step.required_capabilities
+        
+        if not has_exa and not has_native:
+            return WebSearchConfig.default()
+        
+        return WebSearchConfig(
+            use_exa_search=has_exa,
+            use_native_search=has_native,
+            max_results=5,
+            search_context_size=SearchContextSize.MEDIUM,
+        )
     
     async def execute_step(
         self,
@@ -95,9 +111,8 @@ class TaskStepExecutionService:
             f"Steps for task {task.id}"
         )
         
-        context = self._build_step_context(task, step, all_steps)
-        
-        messages = [LlmMessage(role="user", content=context, additional_data={})]
+        messages = [LlmMessage(role="user", content=self._build_step_context(task, step, all_steps), additional_data={})]
+        web_search_config = self._build_web_search_config(step)
         
         response = await self.llm_service.get_completion(
             api_key=api_key,
@@ -108,6 +123,7 @@ class TaskStepExecutionService:
                 "failure_reason": TASK_STEP_FAILURE_REASON_DESCRIPTION,
             },
             temperature=0.7,
+            web_search_config=web_search_config,
         )
         
         output = response.additional_data.get("output", "")

@@ -2,7 +2,7 @@ from abc import abstractmethod, ABC
 from dataclasses import dataclass
 from typing import AsyncGenerator
 
-from app.models.model.models import ModelDescription
+from app.models.web_search_config import WebSearchConfig
 
 
 @dataclass
@@ -30,6 +30,7 @@ class LlmService(ABC):
         messages: list[LlmMessage],
         additional_requested_data: dict[str, str] | None = None,
         temperature: float = 0.7,
+        web_search_config: WebSearchConfig | None = None,
     ) -> LlmMessage:
         """
         Prompt a model and get an answer.
@@ -48,18 +49,12 @@ class LlmService(ABC):
         messages: list[LlmMessage],
         additional_requested_data: dict[str, str] | None = None,
         temperature: float = 0.7,
+        web_search_config: WebSearchConfig | None = None,
     ) -> AsyncGenerator[StreamedChunk, None]:
         """
         Same as `get_completion`, but all fields are streamed.
         We get a stream text response from the model, and stream it back, detecting the additional data tags.
         When a tag is detected, response stream is paused, and that field value is streamed.
         Yields StreamedChunk instances.
-        """
-        pass
-
-    @abstractmethod
-    async def get_models(self) -> list[ModelDescription]:
-        """
-        Get a list of available models.
         """
         pass
