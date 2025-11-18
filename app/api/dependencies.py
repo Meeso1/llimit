@@ -14,6 +14,7 @@ from app.services.chat_service import ChatService
 from app.services.completion_stream_service import CompletionStreamService
 from app.services.llm.llm_service_base import LlmService
 from app.services.llm.llm_service import OpenRouterLlmService
+from app.services.llm_logging_service import LlmLoggingService
 from app.services.model_cache_service import ModelCacheService
 from app.services.sse_service import SseService
 from app.services.task_decomposition_service import TaskDecompositionService
@@ -30,6 +31,7 @@ _chat_repo_instance = ChatRepo(_database_instance)
 _task_repo_instance = TaskRepo(_database_instance)
 _model_cache_service_instance = ModelCacheService()
 _llm_service_instance = OpenRouterLlmService(_model_cache_service_instance)
+_llm_logging_service_instance = LlmLoggingService()
 _sse_service_instance = SseService()
 _api_key_service_instance = ApiKeyService(_api_key_repo_instance)
 _auth_service_instance = AuthService(_api_key_service_instance)
@@ -44,12 +46,14 @@ _task_decomposition_service_instance = TaskDecompositionService(
     llm_service=_llm_service_instance,
     task_repo=_task_repo_instance,
     sse_service=_sse_service_instance,
+    llm_logging_service=_llm_logging_service_instance,
 )
 _task_step_execution_service_instance = TaskStepExecutionService(
     task_repo=_task_repo_instance,
     llm_service=_llm_service_instance,
     sse_service=_sse_service_instance,
     model_selection_service=_task_model_selection_service_instance,
+    llm_logging_service=_llm_logging_service_instance,
 )
 _work_queue_service_instance = WorkQueueService(
     task_repo=_task_repo_instance,
@@ -116,6 +120,11 @@ def get_auth_service() -> AuthService:
 def get_sse_service() -> SseService:
     """Get the singleton SseService instance"""
     return _sse_service_instance
+
+
+def get_llm_logging_service() -> LlmLoggingService:
+    """Get the singleton LlmLoggingService instance"""
+    return _llm_logging_service_instance
 
 
 def get_task_decomposition_service() -> TaskDecompositionService:

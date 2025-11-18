@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from app.db.task_repo import TaskRepo
+from app.services.llm_logging_service import LlmLoggingService
 from utils import not_none
 from app.events.task_events import create_task_step_completed_event, create_task_completed_event
 from app.models.task.enums import TaskStatus, StepStatus, StepType, ModelCapability
@@ -28,11 +29,13 @@ class TaskStepExecutionService:
         llm_service: LlmService,
         sse_service: SseService,
         model_selection_service: TaskModelSelectionService,
+        llm_logging_service: LlmLoggingService,
     ) -> None:
         self.task_repo = task_repo
         self.llm_service = llm_service
         self.sse_service = sse_service
         self.model_selection_service = model_selection_service
+        self.llm_logging_service = llm_logging_service
     
     def _ensure_step_is_normal(self, step: TaskStep) -> NormalTaskStep:
         """Ensure the step is a normal step, raise error otherwise"""
@@ -131,6 +134,7 @@ class TaskStepExecutionService:
         
         messages = [LlmMessage(role="user", content=self._build_step_context(task, step, all_steps), additional_data={})]
         config = self._build_llm_config(step)
+        logger = self.llm_logging_service.create_for_task(task.id)
         
         response = await self.llm_service.get_completion(
             api_key=api_key,
@@ -142,6 +146,7 @@ class TaskStepExecutionService:
             },
             temperature=0.7,
             config=config,
+            logger=logger,
         )
         
         output = response.additional_data.get("output", "")

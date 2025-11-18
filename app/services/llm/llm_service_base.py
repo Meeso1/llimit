@@ -19,6 +19,32 @@ class StreamedChunk:
     additional_data_key: str | None = None
 
 
+class LlmLogger(ABC):
+    """Abstract base class for logging LLM interactions"""
+    
+    @abstractmethod
+    def log_request(
+        self,
+        model: str,
+        messages: list[LlmMessage],
+        additional_requested_data: dict[str, str] | None,
+        temperature: float,
+        config: LlmConfig,
+    ) -> None:
+        """Log an LLM request"""
+        pass
+    
+    @abstractmethod
+    def log_response(
+        self,
+        model: str,
+        response: LlmMessage,
+        config: LlmConfig,
+    ) -> None:
+        """Log an LLM response"""
+        pass
+
+
 class LlmService(ABC):
     """Abstract base class for LLM service implementations"""
     
@@ -31,6 +57,7 @@ class LlmService(ABC):
         additional_requested_data: dict[str, str] | None = None,
         temperature: float = 0.7,
         config: LlmConfig | None = None,
+        logger: "LlmLogger | None" = None,
     ) -> LlmMessage:
         """
         Prompt a model and get an answer.

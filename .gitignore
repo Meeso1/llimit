@@ -5,6 +5,10 @@
 data/*
 !data/.gitkeep
 
+# Logs
+logs/*
+!logs/.gitkeep
+
 # Virtual environments
 .venv
 

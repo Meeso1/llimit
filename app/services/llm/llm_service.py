@@ -7,7 +7,7 @@ from app.models.model.models import ModelDescription
 from app.services.llm.config.llm_config import LlmConfig
 from app.services.llm.config.reasoning_config import ReasoningConfig
 from app.services.llm.config.web_search_config import WebSearchConfig
-from app.services.llm.llm_service_base import LlmService, StreamedChunk, LlmMessage
+from app.services.llm.llm_service_base import LlmService, StreamedChunk, LlmMessage, LlmLogger
 from app.services.model_cache_service import ModelCacheService
 from prompts.llm_base_prompts import BASE_SYSTEM_MESSAGE, ADDITIONAL_DATA_INSTRUCTIONS_TEMPLATE
 
@@ -214,6 +214,7 @@ class OpenRouterLlmService(LlmService):
         additional_requested_data: dict[str, str] | None = None,
         temperature: float = 0.7,
         config: LlmConfig | None = None,
+        logger: LlmLogger | None = None,
     ) -> LlmMessage:
         """
         Prompt a model and get an answer using OpenRouter.
@@ -226,9 +227,11 @@ class OpenRouterLlmService(LlmService):
         if model_desc is None:
             raise HTTPException(status_code=404, detail=f"Model '{model}' not found")
         
-        # Use default config if not provided
         if config is None:
             config = LlmConfig.default()
+        
+        if logger:
+            logger.log_request(model, messages, additional_requested_data, temperature, config)
         
         client = AsyncOpenAI(
             base_url=self._base_url,
@@ -266,11 +269,16 @@ class OpenRouterLlmService(LlmService):
         reasoning_data = self._extract_reasoning_from_message(message)
         additional_data.update(reasoning_data)
         
-        return LlmMessage(
+        response_message = LlmMessage(
             role="assistant",
             content=cleaned_content,
             additional_data=additional_data,
         )
+        
+        if logger:
+            logger.log_response(model, response_message, config)
+        
+        return response_message
 
     def _find_safe_content_end(self, buffer: str, tag_prefix: str) -> int:
         """

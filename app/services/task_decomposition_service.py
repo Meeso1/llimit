@@ -5,6 +5,7 @@ from app.db.task_repo import TaskRepo
 from app.services.llm.config.llm_config import LlmConfig
 from app.services.llm.config.reasoning_config import ReasoningConfig
 from app.services.llm.config.web_search_config import WebSearchConfig
+from app.services.llm_logging_service import LlmLoggingService
 from utils import not_none
 from app.events.task_events import create_task_step_completed_event, create_task_steps_generated_event, create_task_steps_regenerated_event
 from app.services.llm.llm_service_base import LlmService, LlmMessage
@@ -45,10 +46,12 @@ class TaskDecompositionService:
         llm_service: LlmService,
         task_repo: TaskRepo,
         sse_service: SseService,
+        llm_logging_service: LlmLoggingService,
     ) -> None:
         self.llm_service = llm_service
         self.task_repo = task_repo
         self.sse_service = sse_service
+        self.llm_logging_service = llm_logging_service
 
     def _format_capabilities(self) -> str:
         """Format capabilities with their descriptions for prompts."""
@@ -80,7 +83,7 @@ class TaskDecompositionService:
         """
         task = not_none(self.task_repo.get_task_by_id(task_id, user_id), f"Task {task_id}")
         
-        decomposition = await self.decompose_task(task.prompt, api_key)
+        decomposition = await self.decompose_task(task.prompt, api_key, task_id=task_id)
         
         updated_task = not_none(
             self.task_repo.update_task_after_steps_generation(
@@ -191,12 +194,16 @@ class TaskDecompositionService:
         self,
         user_prompt: str,
         api_key: str,
+        task_id: str,
     ) -> TaskDecompositionResult:
         """Decomposes a user task into a structured sequence of steps."""
+        messages = self._build_messages(user_prompt)
+        logger = self.llm_logging_service.create_for_task(task_id)
+        
         response = await self.llm_service.get_completion(
             api_key=api_key,
             model="google/gemini-2.5-pro",
-            messages=self._build_messages(user_prompt),
+            messages=messages,
             additional_requested_data={
                 "title": TASK_TITLE_DESCRIPTION,
                 "steps": self._build_steps_description(),
@@ -206,6 +213,7 @@ class TaskDecompositionService:
                 reasoning=ReasoningConfig.with_medium_effort(),
                 web_search=WebSearchConfig.default(),
             ),
+            logger=logger,
         )
         
         return self._parse_response(response)
@@ -260,6 +268,8 @@ class TaskDecompositionService:
         else:
             messages = self._build_failure_reevaluation_messages(task, reevaluate_step, previous_steps, abandoned_steps)
         
+        logger = self.llm_logging_service.create_for_task(task.id)
+        
         response = await self.llm_service.get_completion(
             api_key=api_key,
             model="google/gemini-2.5-pro",
@@ -272,6 +282,7 @@ class TaskDecompositionService:
                 reasoning=ReasoningConfig.with_medium_effort(),
                 web_search=WebSearchConfig.default(),
             ),
+            logger=logger,
         )
         
         return self._parse_reevaluation_response(response)
