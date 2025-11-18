@@ -1,6 +1,7 @@
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from app.api.dependencies import AuthContextDep, FileRepoDep, FileServiceDep
+from app.models.file.requests import FileUrlRequest
 from app.models.file.responses import FileListResponse, FileMetadataResponse
 
 router = APIRouter(
@@ -34,6 +35,24 @@ async def upload_file(
         description=description,
         content_type=content_type,
         file_content=file_content,
+    )
+    
+    return file_metadata.to_response()
+
+
+@router.post("/url", response_model=FileMetadataResponse, status_code=status.HTTP_201_CREATED)
+async def register_file_url(
+    request: FileUrlRequest,
+    context: AuthContextDep(require_openrouter_key=False),
+    file_service: FileServiceDep,
+) -> FileMetadataResponse:
+    """Register a file URL"""
+    file_metadata = await file_service.register_file_url(
+        user_id=context.user_id,
+        url=request.url,
+        filename=request.filename,
+        description=request.description,
+        content_type=request.content_type,
     )
     
     return file_metadata.to_response()

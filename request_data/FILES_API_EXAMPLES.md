@@ -1,6 +1,4 @@
-# File Upload API Examples
-
-## Upload a file
+# File Upload Examples
 
 ```bash
 # Upload a text file
@@ -38,18 +36,3 @@ curl -X POST "http://localhost:8000/files" \
   -F "content_type=video/mp4" \
   -F "description=Tutorial video"
 ```
-
-## List all files
-
-```bash
-curl -X GET "http://localhost:8000/files" \
-  -H "X-API-Key: your-api-key"
-```
-
-## Notes
-
-- The `content_type` field should be the MIME type of the file (e.g., image/jpeg, application/pdf, audio/wav, video/mp4)
-- This MIME type will be used later when including files in LLM prompts
-- Files are stored per-user, so you'll only see your own files
-- The `description` field is optional
-

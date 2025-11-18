@@ -13,8 +13,9 @@ def _create_files_table() -> str:
             filename TEXT NOT NULL,
             description TEXT,
             content_type TEXT NOT NULL,
-            size_bytes INTEGER NOT NULL,
-            storage_path TEXT NOT NULL,
+            size_bytes INTEGER,
+            storage_path TEXT,
+            url TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
@@ -42,16 +43,17 @@ class FileRepo:
         filename: str,
         description: str | None,
         content_type: str,
-        size_bytes: int,
-        storage_path: str,
         created_at: datetime,
+        size_bytes: int | None = None,
+        storage_path: str | None = None,
+        url: str | None = None,
     ) -> FileMetadata:
         """Create a new file metadata record"""
         self.db.execute_update(
             """
             INSERT INTO files 
-            (id, user_id, filename, description, content_type, size_bytes, storage_path, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (id, user_id, filename, description, content_type, size_bytes, storage_path, url, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 file_id,
@@ -61,6 +63,7 @@ class FileRepo:
                 content_type,
                 size_bytes,
                 storage_path,
+                url,
                 created_at.isoformat(),
             ),
         )
@@ -73,6 +76,7 @@ class FileRepo:
             content_type=content_type,
             size_bytes=size_bytes,
             storage_path=storage_path,
+            url=url,
             created_at=created_at,
         )
     
@@ -80,7 +84,7 @@ class FileRepo:
         """Get a file by ID for a specific user"""
         rows = self.db.execute_query(
             """
-            SELECT id, user_id, filename, description, content_type, size_bytes, storage_path, created_at
+            SELECT id, user_id, filename, description, content_type, size_bytes, storage_path, url, created_at
             FROM files
             WHERE id = ? AND user_id = ?
             """,
@@ -96,7 +100,7 @@ class FileRepo:
         """List all files for a specific user"""
         rows = self.db.execute_query(
             """
-            SELECT id, user_id, filename, description, content_type, size_bytes, storage_path, created_at
+            SELECT id, user_id, filename, description, content_type, size_bytes, storage_path, url, created_at
             FROM files
             WHERE user_id = ?
             ORDER BY created_at DESC
@@ -116,6 +120,7 @@ class FileRepo:
             content_type=row["content_type"],
             size_bytes=row["size_bytes"],
             storage_path=row["storage_path"],
+            url=row["url"],
             created_at=datetime.fromisoformat(row["created_at"]),
         )
 

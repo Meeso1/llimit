@@ -8,7 +8,8 @@ class FileMetadataResponse(BaseModel):
     filename: str
     description: str | None
     content_type: str
-    size_bytes: int
+    size_bytes: int | None
+    url: str | None
     created_at: datetime
 
 

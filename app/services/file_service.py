@@ -50,21 +50,49 @@ class FileService:
             filename=filename,
             description=description,
             content_type=content_type,
+            created_at=now,
             size_bytes=len(file_content),
             storage_path=storage_path,
-            created_at=now,
         )
         
         return file_metadata
     
-    def get_file_path(self, file_metadata: FileMetadata) -> str:
+    async def register_file_url(
+        self,
+        user_id: str,
+        url: str,
+        filename: str,
+        description: str | None,
+        content_type: str,
+    ) -> FileMetadata:
+        """Register a file URL"""
+        file_id = str(uuid4())
+        now = datetime.now(timezone.utc)
+        
+        # Store metadata in database
+        file_metadata = self._file_repo.create_file(
+            file_id=file_id,
+            user_id=user_id,
+            filename=filename,
+            description=description,
+            content_type=content_type,
+            created_at=now,
+            url=url,
+        )
+        
+        return file_metadata
+    
+    def get_file_path(self, file_metadata: FileMetadata) -> str | None:
         """Get the full path to a file on disk"""
+        if file_metadata.storage_path is None:
+            return None
+        
         return os.path.join(self._uploads_dir, file_metadata.storage_path)
     
     def read_file_content(self, file_metadata: FileMetadata) -> bytes | None:
         """Read file content from disk and decode from base64"""
         path = self.get_file_path(file_metadata)
-        if not os.path.exists(path):
+        if path is None or not os.path.exists(path):
             return None
         
         try:
