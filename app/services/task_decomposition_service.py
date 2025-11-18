@@ -2,9 +2,12 @@ import json
 from datetime import datetime, timezone
 
 from app.db.task_repo import TaskRepo
+from app.services.llm.config.llm_config import LlmConfig
+from app.services.llm.config.reasoning_config import ReasoningConfig
+from app.services.llm.config.web_search_config import WebSearchConfig
 from utils import not_none
 from app.events.task_events import create_task_step_completed_event, create_task_steps_generated_event, create_task_steps_regenerated_event
-from app.services.llm_service_base import LlmService, LlmMessage
+from app.services.llm.llm_service_base import LlmService, LlmMessage
 from app.services.sse_service import SseService
 from app.models.task.models import (
     TaskDecompositionResult,
@@ -199,6 +202,10 @@ class TaskDecompositionService:
                 "steps": self._build_steps_description(),
             },
             temperature=0.7,
+            config=LlmConfig(
+                reasoning=ReasoningConfig.with_medium_effort(),
+                web_search=WebSearchConfig.default(),
+            ),
         )
         
         return self._parse_response(response)
@@ -261,6 +268,10 @@ class TaskDecompositionService:
                 "steps": self._build_reevaluation_steps_description(),
             },
             temperature=0.7,
+            config=LlmConfig(
+                reasoning=ReasoningConfig.with_medium_effort(),
+                web_search=WebSearchConfig.default(),
+            ),
         )
         
         return self._parse_reevaluation_response(response)

@@ -12,8 +12,8 @@ from app.services.api_key_service import ApiKeyService
 from app.services.auth_service import AuthService
 from app.services.chat_service import ChatService
 from app.services.completion_stream_service import CompletionStreamService
-from app.services.llm_service_base import LlmService
-from app.services.llm_service import OpenRouterLlmService
+from app.services.llm.llm_service_base import LlmService
+from app.services.llm.llm_service import OpenRouterLlmService
 from app.services.model_cache_service import ModelCacheService
 from app.services.sse_service import SseService
 from app.services.task_decomposition_service import TaskDecompositionService

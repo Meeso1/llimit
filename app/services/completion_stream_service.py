@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from app.events.completion_events import completion_started, completion_chunk, completion_finished
 from app.events.sse_event import SseEvent
-from app.services.llm_service_base import LlmMessage, LlmService
+from app.services.llm.llm_service_base import LlmMessage, LlmService
 
 
 class CompletionStreamService:
@@ -27,6 +27,7 @@ class CompletionStreamService:
             messages=messages,
             additional_requested_data=additional_requested_data,
             temperature=temperature,
+            config=None,
         ):
             yield completion_chunk(completion_id, chunk)
         

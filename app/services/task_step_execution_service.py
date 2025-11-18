@@ -6,8 +6,10 @@ from app.events.task_events import create_task_step_completed_event, create_task
 from app.models.task.enums import TaskStatus, StepStatus, StepType, ModelCapability
 from app.models.task.models import Task, TaskStep, NormalTaskStep, NormalTaskStepDefinition
 from app.models.task.work_queue import WorkQueueItem
-from app.models.web_search_config import WebSearchConfig, SearchContextSize
-from app.services.llm_service_base import LlmService, LlmMessage
+from app.services.llm.config.llm_config import LlmConfig
+from app.services.llm.config.reasoning_config import ReasoningConfig
+from app.services.llm.config.web_search_config import WebSearchConfig, SearchContextSize
+from app.services.llm.llm_service_base import LlmService, LlmMessage
 from app.services.sse_service import SseService
 from app.services.task_model_selection_service import TaskModelSelectionService
 from prompts.task_prompts import TASK_STEP_OUTPUT_DESCRIPTION, TASK_STEP_FAILURE_REASON_DESCRIPTION
@@ -61,6 +63,22 @@ class TaskStepExecutionService:
             max_results=5,
             search_context_size=SearchContextSize.MEDIUM,
         )
+
+    def _build_reasoning_config(self, step: NormalTaskStep) -> ReasoningConfig:
+        """Build reasoning configuration based on step's required capabilities"""
+        has_reasoning = ModelCapability.REASONING in step.required_capabilities
+        
+        if not has_reasoning:
+            return ReasoningConfig.default()
+        
+        return ReasoningConfig.with_medium_effort()
+
+    def _build_llm_config(self, step: NormalTaskStep) -> LlmConfig:
+        """Build LLM configuration based on step's required capabilities"""
+        return LlmConfig(
+            web_search=self._build_web_search_config(step),
+            reasoning=self._build_reasoning_config(step),
+        )
     
     async def execute_step(
         self,
@@ -112,7 +130,7 @@ class TaskStepExecutionService:
         )
         
         messages = [LlmMessage(role="user", content=self._build_step_context(task, step, all_steps), additional_data={})]
-        web_search_config = self._build_web_search_config(step)
+        config = self._build_llm_config(step)
         
         response = await self.llm_service.get_completion(
             api_key=api_key,
@@ -123,7 +141,7 @@ class TaskStepExecutionService:
                 "failure_reason": TASK_STEP_FAILURE_REASON_DESCRIPTION,
             },
             temperature=0.7,
-            web_search_config=web_search_config,
+            config=config,
         )
         
         output = response.additional_data.get("output", "")

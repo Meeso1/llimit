@@ -1,6 +1,6 @@
 from uuid import uuid4
 from app.events.sse_event import SseEvent
-from app.services.llm_service_base import StreamedChunk
+from app.services.llm.llm_service_base import StreamedChunk
 
 
 new_llm_message_chunk_event_type = "message.new_from_assistant_chunk"

@@ -1,15 +1,15 @@
 from abc import abstractmethod, ABC
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import AsyncGenerator
 
-from app.models.web_search_config import WebSearchConfig
+from app.services.llm.config.llm_config import LlmConfig
 
 
 @dataclass
 class LlmMessage:
     role: str
     content: str
-    additional_data: dict[str, str]
+    additional_data: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -30,7 +30,7 @@ class LlmService(ABC):
         messages: list[LlmMessage],
         additional_requested_data: dict[str, str] | None = None,
         temperature: float = 0.7,
-        web_search_config: WebSearchConfig | None = None,
+        config: LlmConfig | None = None,
     ) -> LlmMessage:
         """
         Prompt a model and get an answer.
@@ -49,7 +49,7 @@ class LlmService(ABC):
         messages: list[LlmMessage],
         additional_requested_data: dict[str, str] | None = None,
         temperature: float = 0.7,
-        web_search_config: WebSearchConfig | None = None,
+        config: LlmConfig | None = None,
     ) -> AsyncGenerator[StreamedChunk, None]:
         """
         Same as `get_completion`, but all fields are streamed.

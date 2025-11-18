@@ -4,10 +4,16 @@ from fastapi import HTTPException
 import re
 
 from app.models.model.models import ModelDescription
-from app.models.web_search_config import WebSearchConfig
-from app.services.llm_service_base import LlmService, StreamedChunk, LlmMessage
+from app.services.llm.config.llm_config import LlmConfig
+from app.services.llm.config.reasoning_config import ReasoningConfig
+from app.services.llm.config.web_search_config import WebSearchConfig
+from app.services.llm.llm_service_base import LlmService, StreamedChunk, LlmMessage
 from app.services.model_cache_service import ModelCacheService
 from prompts.llm_base_prompts import BASE_SYSTEM_MESSAGE, ADDITIONAL_DATA_INSTRUCTIONS_TEMPLATE
+
+
+INTERNAL_REASONING_KEY = "_internal_reasoning"
+INTERNAL_REASONING_SUMMARY_KEY = "_internal_reasoning_summary"
 
 
 # TODO: Handle API errors related to API key (incorrect, no credits, etc.) and return 422 from API
@@ -69,20 +75,53 @@ class OpenRouterLlmService(LlmService):
 
         return plugins, web_search_options
 
-    def _build_extra_body(self, web_search_config: WebSearchConfig | None, model_description: ModelDescription) -> dict | None:
-        """Build extra body for OpenRouter API"""
-        if web_search_config is None or not web_search_config.is_enabled():
+    def _validate_additional_requested_data(self, additional_requested_data: dict[str, str] | None) -> None:
+        """Validate that reserved keys are not used in additional_requested_data"""
+        if additional_requested_data:
+            if INTERNAL_REASONING_KEY in additional_requested_data:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Additional data key '{INTERNAL_REASONING_KEY}' is reserved for internal use"
+                )
+            if INTERNAL_REASONING_SUMMARY_KEY in additional_requested_data:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Additional data key '{INTERNAL_REASONING_SUMMARY_KEY}' is reserved for internal use"
+                )
+
+    def _build_reasoning_config(self, reasoning_config: ReasoningConfig, model_supports_reasoning: bool) -> dict | None:
+        """Build reasoning configuration for OpenRouter API"""
+        if not reasoning_config.is_enabled() or not model_supports_reasoning:
             return None
         
-        plugins, web_search_options = self._build_web_search_config(web_search_config, model_description.supports_native_web_search)
+        return {
+            "effort": reasoning_config.effort.value
+        }
 
-        extra_body = {}
-        if plugins:
-            extra_body["plugins"] = plugins
-        if web_search_options:
-            extra_body["web_search_options"] = web_search_options
+    def _build_extra_body(self, config: LlmConfig | None, model_description: ModelDescription) -> dict | None:
+        """Build extra body for OpenRouter API"""
+        if config is None:
+            return None
         
-        return extra_body
+        extra_body = {}
+        
+        # Add web search config
+        if config.web_search.is_enabled():
+            plugins, web_search_options = self._build_web_search_config(
+                config.web_search, 
+                model_description.supports_native_web_search
+            )
+            if plugins:
+                extra_body["plugins"] = plugins
+            if web_search_options:
+                extra_body["web_search_options"] = web_search_options
+        
+        # Add reasoning config
+        reasoning_config = self._build_reasoning_config(config.reasoning, model_description.supports_reasoning)
+        if reasoning_config:
+            extra_body["reasoning"] = reasoning_config
+        
+        return extra_body if extra_body else None
 
     def _parse_additional_data(self, content: str) -> tuple[str, dict[str, str]]:
         """Extract additional data tags from content and return cleaned content + data dict"""
@@ -99,6 +138,73 @@ class OpenRouterLlmService(LlmService):
         cleaned_content = re.sub(pattern, '', content, flags=re.DOTALL).strip()
         
         return cleaned_content, additional_data
+
+    def _extract_reasoning_from_message(self, message: any) -> dict[str, str]:
+        """Extract reasoning data from a non-streaming message response"""
+        reasoning_data: dict[str, str] = {}
+        
+        # Add simple reasoning field if available (for models that return simple string)
+        reasoning = getattr(message, "reasoning", None)
+        if reasoning:
+            reasoning_data[INTERNAL_REASONING_KEY] = reasoning
+        
+        # Add structured reasoning_details if available (for advanced use cases)
+        reasoning_details = getattr(message, "reasoning_details", None)
+        if not reasoning_details:
+            return reasoning_data
+        
+        reasoning_texts = []
+        reasoning_summaries = []
+        
+        for detail in reasoning_details:
+            detail_type = getattr(detail, "type", None)
+            if detail_type == "reasoning.text":
+                text = getattr(detail, "text", None)
+                if text:
+                    reasoning_texts.append(text)
+            elif detail_type == "reasoning.summary":
+                summary = getattr(detail, "summary", None)
+                if summary:
+                    reasoning_summaries.append(summary)
+        
+        if reasoning_texts:
+            # Append to existing reasoning or set new
+            if INTERNAL_REASONING_KEY in reasoning_data:
+                reasoning_data[INTERNAL_REASONING_KEY] += "\n" + "\n".join(reasoning_texts)
+            else:
+                reasoning_data[INTERNAL_REASONING_KEY] = "\n".join(reasoning_texts)
+        
+        if reasoning_summaries:
+            reasoning_data[INTERNAL_REASONING_SUMMARY_KEY] = "\n".join(reasoning_summaries)
+        
+        return reasoning_data
+
+    def _yield_reasoning_chunks_from_delta(self, delta: any) -> list[StreamedChunk]:
+        """Extract reasoning chunks from a streaming delta and return list of chunks to yield"""
+        reasoning_details = getattr(delta, "reasoning_details", None)
+        if not reasoning_details:
+            return []
+        
+        chunks: list[StreamedChunk] = []
+        for detail in reasoning_details:
+            detail_type = getattr(detail, "type", None)
+            
+            if detail_type == "reasoning.text":
+                text = getattr(detail, "text", None)
+                if text:
+                    chunks.append(StreamedChunk(
+                        content=text,
+                        additional_data_key=INTERNAL_REASONING_KEY,
+                    ))
+            elif detail_type == "reasoning.summary":
+                summary = getattr(detail, "summary", None)
+                if summary:
+                    chunks.append(StreamedChunk(
+                        content=summary,
+                        additional_data_key=INTERNAL_REASONING_SUMMARY_KEY,
+                    ))
+        
+        return chunks
     
     async def get_completion(
         self,
@@ -107,15 +213,22 @@ class OpenRouterLlmService(LlmService):
         messages: list[LlmMessage],
         additional_requested_data: dict[str, str] | None = None,
         temperature: float = 0.7,
-        web_search_config: WebSearchConfig | None = None,
+        config: LlmConfig | None = None,
     ) -> LlmMessage:
         """
         Prompt a model and get an answer using OpenRouter.
         """
+        # Validate additional_requested_data
+        self._validate_additional_requested_data(additional_requested_data)
+        
         # Validate model and get description
         model_desc = await self._model_cache_service.get_model_by_id(model)
         if model_desc is None:
             raise HTTPException(status_code=404, detail=f"Model '{model}' not found")
+        
+        # Use default config if not provided
+        if config is None:
+            config = LlmConfig.default()
         
         client = AsyncOpenAI(
             base_url=self._base_url,
@@ -132,7 +245,7 @@ class OpenRouterLlmService(LlmService):
         for msg in messages:
             openai_messages.append({"role": msg.role, "content": msg.content})
         
-        extra_body = self._build_extra_body(web_search_config, model_desc)
+        extra_body = self._build_extra_body(config, model_desc)
         
         # Make API call
         response = await client.chat.completions.create(
@@ -143,10 +256,15 @@ class OpenRouterLlmService(LlmService):
         )
         
         # Extract response content
-        raw_content = response.choices[0].message.content or ""
+        message = response.choices[0].message
+        raw_content = message.content or ""
         
         # Parse additional data
         cleaned_content, additional_data = self._parse_additional_data(raw_content)
+        
+        # Extract reasoning data
+        reasoning_data = self._extract_reasoning_from_message(message)
+        additional_data.update(reasoning_data)
         
         return LlmMessage(
             role="assistant",
@@ -241,15 +359,22 @@ class OpenRouterLlmService(LlmService):
         messages: list[LlmMessage],
         additional_requested_data: dict[str, str] | None = None,
         temperature: float = 0.7,
-        web_search_config: WebSearchConfig | None = None,
+        config: LlmConfig | None = None,
     ) -> AsyncGenerator[StreamedChunk, None]:
         """
         Stream completion from OpenRouter, parsing additional data tags on the fly.
         """
+        # Validate additional_requested_data
+        self._validate_additional_requested_data(additional_requested_data)
+        
         # Validate model and get description
         model_desc = await self._model_cache_service.get_model_by_id(model)
         if model_desc is None:
             raise HTTPException(status_code=404, detail=f"Model '{model}' not found")
+        
+        # Use default config if not provided
+        if config is None:
+            config = LlmConfig.default()
         
         client = AsyncOpenAI(
             base_url=self._base_url,
@@ -266,7 +391,7 @@ class OpenRouterLlmService(LlmService):
         for msg in messages:
             openai_messages.append({"role": msg.role, "content": msg.content})
         
-        extra_body = self._build_extra_body(web_search_config, model_desc)
+        extra_body = self._build_extra_body(config, model_desc)
         
         # Make streaming API call
         stream = await client.chat.completions.create(
@@ -284,11 +409,19 @@ class OpenRouterLlmService(LlmService):
         tag_content = ""
         
         async for chunk in stream:
-            delta = chunk.choices[0].delta.content
-            if delta is None:
+            delta = chunk.choices[0].delta
+            
+            # Handle reasoning if present - stream it as it comes in
+            reasoning_chunks = self._yield_reasoning_chunks_from_delta(delta)
+            for reasoning_chunk in reasoning_chunks:
+                yield reasoning_chunk
+            
+            # Handle content
+            content = delta.content
+            if content is None:
                 continue
             
-            buffer += delta
+            buffer += content
             
             # Process buffer until no more complete tags can be found
             while buffer:

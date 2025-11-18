@@ -5,7 +5,7 @@ from fastapi.responses import StreamingResponse
 from app.api.dependencies import LLMServiceDep, CompletionStreamServiceDep, AuthContextDep
 from app.models.completion.requests import CompletionRequest
 from app.models.completion.responses import CompletionResponse
-from app.services.llm_service_base import LlmMessage
+from app.services.llm.llm_service_base import LlmMessage
 
 router = APIRouter(
     prefix="/completions",
@@ -56,6 +56,7 @@ async def create_completion(
         messages=messages,
         additional_requested_data=request_body.additional_requested_data,
         temperature=request_body.temperature,
+        config=None,
     )
     
     return CompletionResponse(

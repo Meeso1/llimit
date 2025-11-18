@@ -15,7 +15,7 @@ from app.models.chat.models import (
     ChatThread,
     ChatMessage,
 )
-from app.services.llm_service import LlmMessage, LlmService
+from app.services.llm.llm_service_base import LlmMessage, LlmService
 from app.services.sse_service import SseService
 from app.events.thread_created import thread_created
 from prompts.chat_prompts import (
@@ -149,6 +149,7 @@ class ChatService:
                     "description": CHAT_DESCRIPTION_DESCRIPTION,
                 },
                 temperature=0.7,
+                config=None,
             )
             
             assistant_message = self._chat_repo.add_message(
@@ -198,6 +199,7 @@ class ChatService:
                     "description": CHAT_DESCRIPTION_DESCRIPTION,
                 },
                 temperature=0.7,
+                config=None,
             )
             
             assistant_message_id = str(uuid4())
