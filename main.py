@@ -8,6 +8,7 @@ from app.api.dependencies import get_database, get_user_repo, get_api_key_servic
 from app.api.routes.api_keys import router as api_keys_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.completions import router as completions_router
+from app.api.routes.files import router as files_router
 from app.api.routes.health import router as health_router
 from app.api.routes.models import router as models_router
 from app.api.routes.sse import router as sse_router
@@ -78,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(chat_router)
     app.include_router(completions_router)
+    app.include_router(files_router)
     app.include_router(models_router)
     app.include_router(sse_router)
     app.include_router(task_router)

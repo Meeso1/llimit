@@ -9,6 +9,10 @@ data/*
 logs/*
 !logs/.gitkeep
 
+# Uploads
+uploads/*
+!uploads/.gitkeep
+
 # Virtual environments
 .venv
 

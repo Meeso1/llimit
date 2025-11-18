@@ -6,12 +6,14 @@ from app.request_context import RequestContext
 from app.db.api_key_repo import ApiKeyRepo
 from app.db.chat_repo import ChatRepo
 from app.db.database import Database
+from app.db.file_repo import FileRepo
 from app.db.task_repo import TaskRepo
 from app.db.user_repo import UserRepo
 from app.services.api_key_service import ApiKeyService
 from app.services.auth_service import AuthService
 from app.services.chat_service import ChatService
 from app.services.completion_stream_service import CompletionStreamService
+from app.services.file_service import FileService
 from app.services.llm.llm_service_base import LlmService
 from app.services.llm.llm_service import OpenRouterLlmService
 from app.services.llm_logging_service import LlmLoggingService
@@ -28,6 +30,7 @@ _database_instance = Database()
 _user_repo_instance = UserRepo(_database_instance)
 _api_key_repo_instance = ApiKeyRepo(_database_instance)
 _chat_repo_instance = ChatRepo(_database_instance)
+_file_repo_instance = FileRepo(_database_instance)
 _task_repo_instance = TaskRepo(_database_instance)
 _model_cache_service_instance = ModelCacheService()
 _llm_service_instance = OpenRouterLlmService(_model_cache_service_instance)
@@ -41,6 +44,7 @@ _chat_service_instance = ChatService(
     chat_repo=_chat_repo_instance,
     sse_service=_sse_service_instance,
 )
+_file_service_instance = FileService(_file_repo_instance)
 _completion_stream_service_instance = CompletionStreamService(llm_service=_llm_service_instance)
 _task_decomposition_service_instance = TaskDecompositionService(
     llm_service=_llm_service_instance,
@@ -81,6 +85,11 @@ def get_user_repo() -> UserRepo:
 def get_chat_repo() -> ChatRepo:
     """Get the singleton ChatRepo instance"""
     return _chat_repo_instance
+
+
+def get_file_repo() -> FileRepo:
+    """Get the singleton FileRepo instance"""
+    return _file_repo_instance
 
 
 def get_api_key_repo() -> ApiKeyRepo:
@@ -142,6 +151,11 @@ def get_chat_service() -> ChatService:
     return _chat_service_instance
 
 
+def get_file_service() -> FileService:
+    """Get the singleton FileService instance"""
+    return _file_service_instance
+
+
 def get_completion_stream_service() -> CompletionStreamService:
     """Get the singleton CompletionStreamService instance"""
     return _completion_stream_service_instance
@@ -169,6 +183,8 @@ def get_auth_context(require_openrouter_key: bool = True):
 
 # Type annotations for dependencies
 ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
+FileRepoDep = Annotated[FileRepo, Depends(get_file_repo)]
+FileServiceDep = Annotated[FileService, Depends(get_file_service)]
 CompletionStreamServiceDep = Annotated[CompletionStreamService, Depends(get_completion_stream_service)]
 TaskCreationServiceDep = Annotated[TaskCreationService, Depends(get_task_creation_service)]
 TaskRepoDep = Annotated[TaskRepo, Depends(get_task_repo)]

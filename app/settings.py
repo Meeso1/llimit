@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     api_key: str = "dev-api-key-12345"
     db_path: str = "data/llimit.db"
+    uploads_path: str = "uploads"
     preserve_old_db: bool = False
     
     class Config:
