@@ -17,6 +17,7 @@ class Task:
     completed_at: datetime | None
     steps_generated: bool
     output: str | None
+    attached_file_ids: list[str]
 
     def to_response(self) -> TaskResponse:
         return TaskResponse(
@@ -54,6 +55,7 @@ class NormalTaskStep(TaskStep):
     """Normal execution step with model selection"""
     complexity: ComplexityLevel
     required_capabilities: list[ModelCapability]
+    required_file_ids: list[str]
     model_name: str | None
     output: str | None
     failure_reason: str | None
@@ -115,6 +117,7 @@ class NormalTaskStepDefinition(TaskStepDefinition):
     """Definition for normal execution steps"""
     complexity: ComplexityLevel
     required_capabilities: list[ModelCapability]
+    required_file_ids: list[str]
 
 
 @dataclass

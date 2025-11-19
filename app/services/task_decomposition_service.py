@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timezone
 
+from app.db.file_repo import FileRepo
 from app.db.task_repo import TaskRepo
 from app.services.llm.config.llm_config import LlmConfig
 from app.services.llm.config.reasoning_config import ReasoningConfig
@@ -33,6 +34,7 @@ from prompts.task_prompts import (
     TASK_REEVALUATE_STEP_FORMAT,
     TASK_ABANDONED_STEP_FORMAT,
     TASK_ABANDONED_STEPS_SECTION_TEMPLATE,
+    ATTACHED_FILES_SECTION_TEMPLATE,
 )
 
 
@@ -45,11 +47,13 @@ class TaskDecompositionService:
         self,
         llm_service: LlmService,
         task_repo: TaskRepo,
+        file_repo: FileRepo,
         sse_service: SseService,
         llm_logging_service: LlmLoggingService,
     ) -> None:
         self.llm_service = llm_service
         self.task_repo = task_repo
+        self.file_repo = file_repo
         self.sse_service = sse_service
         self.llm_logging_service = llm_logging_service
 
@@ -57,6 +61,23 @@ class TaskDecompositionService:
         """Format capabilities with their descriptions for prompts."""
         descriptions = ModelCapability.descriptions()
         return "\n".join([f'- "{cap.value}": {descriptions[cap.value]}' for cap in ModelCapability])
+    
+    def _format_attached_files(self, task: Task) -> str:
+        """Format attached files information for prompts"""
+        if not task.attached_file_ids:
+            return ""
+        
+        files_info = []
+        for idx, file_id in enumerate(task.attached_file_ids):
+            file_metadata = self.file_repo.get_file_by_id_and_user(file_id, task.user_id)
+            if file_metadata:
+                description = file_metadata.description or "(no description)"
+                files_info.append(f"[{idx}] {file_metadata.filename} (Type: {file_metadata.content_type}): {description or '(no description)'}")
+        
+        if not files_info:
+            return ""
+        
+        return ATTACHED_FILES_SECTION_TEMPLATE.format(files_list="\n".join(files_info))
     
     def _ensure_step_is_reevaluate(self, step: TaskStep) -> ReevaluateTaskStep:
         """Ensure the step is a reevaluate step, raise error otherwise"""
@@ -83,7 +104,7 @@ class TaskDecompositionService:
         """
         task = not_none(self.task_repo.get_task_by_id(task_id, user_id), f"Task {task_id}")
         
-        decomposition = await self.decompose_task(task.prompt, api_key, task_id=task_id)
+        decomposition = await self.decompose_task(task, api_key)
         
         updated_task = not_none(
             self.task_repo.update_task_after_steps_generation(
@@ -192,13 +213,12 @@ class TaskDecompositionService:
     
     async def decompose_task(
         self,
-        user_prompt: str,
+        task: Task,
         api_key: str,
-        task_id: str,
     ) -> TaskDecompositionResult:
         """Decomposes a user task into a structured sequence of steps."""
-        messages = self._build_messages(user_prompt)
-        logger = self.llm_logging_service.create_for_task(task_id)
+        messages = self._build_messages(task)
+        logger = self.llm_logging_service.create_for_task(task.id)
         
         response = await self.llm_service.get_completion(
             api_key=api_key,
@@ -216,27 +236,29 @@ class TaskDecompositionService:
             logger=logger,
         )
         
-        return self._parse_response(response)
+        return self._parse_response(response, task)
     
-    def _parse_response(self, response: LlmMessage) -> TaskDecompositionResult:
+    def _parse_response(self, response: LlmMessage, task: Task) -> TaskDecompositionResult:
         title = response.additional_data.get("title", "[Untitled]").strip()
         
         steps_json = response.additional_data.get("steps", "")
         if not steps_json:
             raise TaskDecompositionError("Steps data is missing")
         
-        steps = self._parse_steps_json(steps_json, "Step")
+        steps = self._parse_steps_json(steps_json, "Step", task.attached_file_ids)
         
         return TaskDecompositionResult(title=title, steps=steps)
 
-    def _build_messages(self, user_prompt: str) -> list[LlmMessage]:
+    def _build_messages(self, task: Task) -> list[LlmMessage]:
         complexity_levels = ", ".join([f'"{level.value}"' for level in ComplexityLevel])
         capabilities = self._format_capabilities()
+        attached_files_section = self._format_attached_files(task)
         
         content = TASK_DECOMPOSITION_PROMPT_TEMPLATE.format(
             complexity_levels=complexity_levels,
             capabilities=capabilities,
-            user_prompt=user_prompt,
+            user_prompt=task.prompt,
+            attached_files_section=attached_files_section,
         )
         
         return [LlmMessage.user(content)]
@@ -285,7 +307,7 @@ class TaskDecompositionService:
             logger=logger,
         )
         
-        return self._parse_reevaluation_response(response)
+        return self._parse_reevaluation_response(response, task)
     
     def _build_abandoned_steps_context(self, abandoned_steps: list[TaskStep]) -> str:
         """Build the abandoned steps context section for reevaluation prompts"""
@@ -407,15 +429,15 @@ class TaskDecompositionService:
             capabilities=capabilities,
         )
     
-    def _parse_reevaluation_response(self, response: LlmMessage) -> list[TaskStepDefinition]:
+    def _parse_reevaluation_response(self, response: LlmMessage, task: Task) -> list[TaskStepDefinition]:
         """Parse reevaluation response - uses shared step parsing logic"""
         steps_json = response.additional_data.get("steps", "")
         if not steps_json:
             raise TaskDecompositionError("Steps data is missing from reevaluation")
         
-        return self._parse_steps_json(steps_json, "Reevaluation step")
+        return self._parse_steps_json(steps_json, "Reevaluation step", task.attached_file_ids)
     
-    def _parse_steps_json(self, steps_json: str, step_label_prefix: str) -> list[TaskStepDefinition]:
+    def _parse_steps_json(self, steps_json: str, step_label_prefix: str, attached_file_ids: list[str]) -> list[TaskStepDefinition]:
         """Shared logic to parse steps JSON into TaskStepDefinition objects"""
         try:
             steps_data = json.loads(steps_json)
@@ -462,11 +484,31 @@ class TaskDecompositionService:
                     except ValueError:
                         raise TaskDecompositionError(f"{step_label} has invalid capability: {cap_str}")
                 
+                # Parse required_file_indexes (optional) and convert to file IDs
+                required_file_indexes = step_data.get("required_file_indexes", [])
+                if not isinstance(required_file_indexes, list):
+                    raise TaskDecompositionError(f"{step_label} has invalid required_file_indexes format")
+                
+                # Convert indexes to actual file IDs
+                required_file_ids = []
+                for idx in required_file_indexes:
+                    if not isinstance(idx, int):
+                        raise TaskDecompositionError(f"{step_label} has non-integer file index: {idx}")
+                    
+                    if idx < 0 or idx >= len(attached_file_ids):
+                        raise TaskDecompositionError(
+                            f"{step_label} has file index {idx} out of range. "
+                            f"Task has {len(attached_file_ids)} attached files (indexes 0-{len(attached_file_ids)-1})"
+                        )
+                    
+                    required_file_ids.append(attached_file_ids[idx])
+                
                 steps.append(NormalTaskStepDefinition(
                     prompt=prompt,
                     step_type=step_type,
                     complexity=complexity,
                     required_capabilities=capabilities,
+                    required_file_ids=required_file_ids,
                 ))
             elif step_type == StepType.REEVALUATE:
                 steps.append(ReevaluateTaskStepDefinition(

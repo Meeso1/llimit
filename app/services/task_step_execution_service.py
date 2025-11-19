@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
 
+from app.db.file_repo import FileRepo
 from app.db.task_repo import TaskRepo
+from app.services.file_service import FileService
+from app.services.llm.llm_file import LlmFileBase
 from app.services.llm_logging_service import LlmLoggingService
 from utils import not_none
 from app.events.task_events import create_task_step_completed_event, create_task_completed_event
@@ -26,12 +29,16 @@ class TaskStepExecutionService:
     def __init__(
         self,
         task_repo: TaskRepo,
+        file_repo: FileRepo,
+        file_service: FileService,
         llm_service: LlmService,
         sse_service: SseService,
         model_selection_service: TaskModelSelectionService,
         llm_logging_service: LlmLoggingService,
     ) -> None:
         self.task_repo = task_repo
+        self.file_repo = file_repo
+        self.file_service = file_service
         self.llm_service = llm_service
         self.sse_service = sse_service
         self.model_selection_service = model_selection_service
@@ -51,6 +58,21 @@ class TaskStepExecutionService:
             )
         
         return step
+    
+    def _load_files_for_step(self, step: NormalTaskStep, user_id: str) -> list[LlmFileBase]:
+        """Load the files required for a step"""
+        files: list[LlmFileBase] = []
+        
+        for file_id in step.required_file_ids:
+            file_metadata = self.file_repo.get_file_by_id_and_user(file_id, user_id)
+            if file_metadata is None:
+                raise TaskStepExecutionError(
+                    f"File {file_id} not found for step {step.id}. This shouldn't happen if validation is correct."
+                )
+            
+            files.append(self.file_service.convert_file_to_llm_file(file_metadata))
+        
+        return files
 
     def _build_web_search_config(self, step: NormalTaskStep) -> WebSearchConfig:
         """Build web search configuration based on step's required capabilities"""
@@ -132,7 +154,10 @@ class TaskStepExecutionService:
             f"Steps for task {task.id}"
         )
         
-        messages = [LlmMessage.user(self._build_step_context(task, step, all_steps))]
+        # Load files required for this step
+        files = self._load_files_for_step(step, user_id)
+        
+        messages = [LlmMessage.user(self._build_step_context(task, step, all_steps), files=files)]
         config = self._build_llm_config(step)
         logger = self.llm_logging_service.create_for_task(task.id)
         

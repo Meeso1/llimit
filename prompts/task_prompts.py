@@ -2,9 +2,17 @@
 Task-related prompts and additional data descriptions.
 """
 
+# Format template for attached files section
+# Template variables: {files_list}
+ATTACHED_FILES_SECTION_TEMPLATE = """
+Attached files (available for steps to use):
+{files_list}
+
+When specifying which files a step needs, use the file indexes (0-based) in the "required_file_indexes" array."""
+
 # Task decomposition system prompt template
-# Template variables: {complexity_levels}, {capabilities}, {user_prompt}
-TASK_DECOMPOSITION_PROMPT_TEMPLATE = """You are a task decomposition assistant. Your goal is to break down complex user tasks into a series of sequential steps that can be executed independently by different AI models.
+# Template variables: {complexity_levels}, {capabilities}, {user_prompt}, {attached_files_section}
+TASK_DECOMPOSITION_PROMPT_TEMPLATE = """You are a task decomposition assistant. Your goal is to break down complex user tasks into a series of sequential steps that can be executed independently by different AI models.{attached_files_section}
 
 When decomposing a task, follow these guidelines:
 1. Break the task into clear, sequential steps
@@ -62,10 +70,11 @@ TASK_STEPS_DESCRIPTION_TEMPLATE = """JSON array of step objects. Each object mus
 For normal steps only:
 - "complexity": string, one of: {complexity_levels}
 - "required_capabilities": array of strings from: {capabilities} (only include capabilities that are actually needed; can be empty array if no special capabilities required)
+- "required_file_indexes": array of integers (0-based indexes) for files this step needs access to (optional; can be empty array or omitted if no files needed; only use indexes from the attached files list)
 
 For reevaluate steps, only prompt and step_type are needed.
 
-Example: [{{"prompt": "Research X", "step_type": "normal", "complexity": "low", "required_capabilities": ["web_search"]}}, {{"prompt": "Reevaluate next steps based on research", "step_type": "reevaluate"}}]"""
+Example: [{{"prompt": "Research X", "step_type": "normal", "complexity": "low", "required_capabilities": ["web_search"], "required_file_indexes": []}}, {{"prompt": "Reevaluate next steps based on research", "step_type": "reevaluate"}}]"""
 
 # Task step execution context template
 # Template variables: {task_title_or_prompt}, {previous_steps}, {step_number}, {step_prompt}
@@ -201,8 +210,9 @@ TASK_REEVALUATION_STEPS_DESCRIPTION_TEMPLATE = """JSON array of step objects. Ea
 For normal steps only:
 - "complexity": string, one of: {complexity_levels}
 - "required_capabilities": array of strings from: {capabilities} (only include capabilities that are actually needed; can be empty array if no special capabilities required)
+- "required_file_indexes": array of integers (0-based indexes) for files this step needs access to (optional; can be empty array or omitted if no files needed; only use indexes from the attached files list)
 
 For reevaluate steps, only prompt and step_type are needed.
 
-Example: [{{"prompt": "Research X", "step_type": "normal", "complexity": "low", "required_capabilities": ["web_search"]}}, {{"prompt": "Reevaluate approach based on findings", "step_type": "reevaluate"}}]"""
+Example: [{{"prompt": "Research X", "step_type": "normal", "complexity": "low", "required_capabilities": ["web_search"], "required_file_indexes": []}}, {{"prompt": "Reevaluate approach based on findings", "step_type": "reevaluate"}}]"""
 

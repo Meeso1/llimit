@@ -171,3 +171,26 @@ class VideoUrl(LlmFileBase):
             return "Model does not support video input"
         
         return None
+
+
+@dataclass
+class TextFile(LlmFileBase):
+    """Text file content included as a text content block"""
+    filename: str
+    content_type: str
+    content: str
+    
+    def to_dict(self) -> dict[str, Any]:
+        formatted_content = (
+            f"[File: {self.filename}]\n"
+            f"[Content-Type: {self.content_type}]\n"
+            f"\n{self.content}"
+        )
+        return {
+            "type": "text",
+            "text": formatted_content
+        }
+        
+    def validate(self, model_description: ModelDescription) -> str | None:
+        # Text files work with all models - they're just included as text content
+        return None

@@ -6,7 +6,7 @@ from typing import Any, Callable
 from app.settings import settings
 
 
-DB_VERSION = 3
+DB_VERSION = 4
 
 
 class DatabaseNotInitializedError(Exception):

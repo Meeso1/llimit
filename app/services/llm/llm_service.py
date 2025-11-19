@@ -91,8 +91,12 @@ class OpenRouterLlmService(LlmService):
                     detail=f"Additional data key '{INTERNAL_REASONING_SUMMARY_KEY}' is reserved for internal use"
                 )
 
-    def _validate_supported_inputs(self, files: list[LlmFileBase], model_description: ModelDescription) -> None:
-        """Validate that the files are supported by the model"""
+    def _validate_supported_inputs(self, messages: list[LlmMessage], model_description: ModelDescription) -> None:
+        """Validate that the files in messages are supported by the model"""
+        files = []
+        for msg in messages:
+            files.extend(msg.files)
+        
         errors = []
         for file in files:
             validation_error = file.validate(model_description)
@@ -245,12 +249,14 @@ class OpenRouterLlmService(LlmService):
         Prompt a model and get an answer using OpenRouter.
         """
         self._validate_additional_requested_data(additional_requested_data)
-        self._validate_supported_inputs(messages, model_desc)
         
         # Validate model and get description
         model_desc = await self._model_cache_service.get_model_by_id(model)
         if model_desc is None:
             raise HTTPException(status_code=404, detail=f"Model '{model}' not found")
+        
+        # Validate that files in messages are supported by the model
+        self._validate_supported_inputs(messages, model_desc)
         
         if config is None:
             config = LlmConfig.default()
@@ -384,12 +390,14 @@ class OpenRouterLlmService(LlmService):
         Stream completion from OpenRouter, parsing additional data tags on the fly.
         """
         self._validate_additional_requested_data(additional_requested_data)
-        self._validate_supported_inputs(messages, model_desc)
         
         # Validate model and get description
         model_desc = await self._model_cache_service.get_model_by_id(model)
         if model_desc is None:
             raise HTTPException(status_code=404, detail=f"Model '{model}' not found")
+        
+        # Validate that files in messages are supported by the model
+        self._validate_supported_inputs(messages, model_desc)
         
         # Use default config if not provided
         if config is None:

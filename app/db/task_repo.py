@@ -28,6 +28,7 @@ def _create_tasks_table() -> str:
             completed_at TEXT,
             steps_generated INTEGER NOT NULL DEFAULT 0,
             output TEXT,
+            attached_file_ids TEXT NOT NULL DEFAULT '[]',
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """
@@ -83,13 +84,17 @@ class TaskRepo:
         user_id: str,
         prompt: str,
         created_at: datetime,
+        attached_file_ids: list[str] | None = None,
     ) -> Task:
         """Create a new task"""
+        if attached_file_ids is None:
+            attached_file_ids = []
+        
         self.db.execute_update(
             """
             INSERT INTO tasks 
-            (id, user_id, prompt, status, created_at, steps_generated)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (id, user_id, prompt, status, created_at, steps_generated, attached_file_ids)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task_id,
@@ -98,6 +103,7 @@ class TaskRepo:
                 TaskStatus.DECOMPOSING.value,
                 created_at.isoformat(),
                 0,
+                json.dumps(attached_file_ids),
             ),
         )
         
@@ -111,13 +117,14 @@ class TaskRepo:
             completed_at=None,
             steps_generated=False,
             output=None,
+            attached_file_ids=attached_file_ids,
         )
     
     def get_task_by_id(self, task_id: str, user_id: str) -> Task | None:
         """Get a task by ID for a specific user"""
         rows = self.db.execute_query(
             """
-            SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated, output
+            SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated, output, attached_file_ids
             FROM tasks
             WHERE id = ? AND user_id = ?
             """,
@@ -133,7 +140,7 @@ class TaskRepo:
         """List all tasks for a specific user"""
         rows = self.db.execute_query(
             """
-            SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated, output
+            SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated, output, attached_file_ids
             FROM tasks
             WHERE user_id = ?
             ORDER BY created_at DESC
@@ -163,8 +170,8 @@ class TaskRepo:
             self.db.execute_update(
                 """
                 INSERT INTO task_steps 
-                (id, task_id, step_number, prompt, status, step_type, step_details)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (id, task_id, step_number, prompt, status, step_type, step_details, required_file_ids)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(uuid4()),
@@ -174,11 +181,12 @@ class TaskRepo:
                     StepStatus.PENDING.value,
                     step_def.step_type.value,
                     step_details,
+                    json.dumps(step_def.required_file_ids),
                 ),
             )
         
         rows = self.db.execute_query(
-            "SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated, output FROM tasks WHERE id = ?",
+            "SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated, output, attached_file_ids FROM tasks WHERE id = ?",
             (task_id,),
         )
         return self._row_to_task(rows[0]) if rows else None
@@ -196,7 +204,7 @@ class TaskRepo:
         )
         
         rows = self.db.execute_query(
-            "SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated, output FROM tasks WHERE id = ?",
+            "SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated, output, attached_file_ids FROM tasks WHERE id = ?",
             (task_id,),
         )
         return self._row_to_task(rows[0]) if rows else None
@@ -302,6 +310,7 @@ class TaskRepo:
             completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
             steps_generated=bool(row["steps_generated"]),
             output=row["output"],
+            attached_file_ids=json.loads(row["attached_file_ids"]) if row.get("attached_file_ids") else [],
         )
     
     def get_step_by_id(self, step_id: str) -> TaskStep | None:
@@ -339,10 +348,12 @@ class TaskRepo:
         
         if step_type == StepType.NORMAL:
             capabilities = [ModelCapability(cap) for cap in step_details["required_capabilities"]]
+            required_file_ids = step_details.get("required_file_ids", [])
             return NormalTaskStep(
                 **common_fields,
                 complexity=ComplexityLevel(step_details["complexity"]),
                 required_capabilities=capabilities,
+                required_file_ids=required_file_ids,
                 model_name=row["model_name"],
                 output=row["output"],
                 failure_reason=row["failure_reason"],
@@ -445,6 +456,7 @@ class TaskRepo:
             return json.dumps({
                 "complexity": step_def.complexity.value,
                 "required_capabilities": [cap.value for cap in step_def.required_capabilities],
+                "required_file_ids": step_def.required_file_ids,
             })
         elif isinstance(step_def, ReevaluateTaskStepDefinition):
             return json.dumps({

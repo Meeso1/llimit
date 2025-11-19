@@ -49,11 +49,14 @@ _completion_stream_service_instance = CompletionStreamService(llm_service=_llm_s
 _task_decomposition_service_instance = TaskDecompositionService(
     llm_service=_llm_service_instance,
     task_repo=_task_repo_instance,
+    file_repo=_file_repo_instance,
     sse_service=_sse_service_instance,
     llm_logging_service=_llm_logging_service_instance,
 )
 _task_step_execution_service_instance = TaskStepExecutionService(
     task_repo=_task_repo_instance,
+    file_repo=_file_repo_instance,
+    file_service=_file_service_instance,
     llm_service=_llm_service_instance,
     sse_service=_sse_service_instance,
     model_selection_service=_task_model_selection_service_instance,
@@ -67,6 +70,7 @@ _work_queue_service_instance = WorkQueueService(
 )
 _task_creation_service_instance = TaskCreationService(
     task_repo=_task_repo_instance,
+    file_repo=_file_repo_instance,
     work_queue_service=_work_queue_service_instance,
     sse_service=_sse_service_instance,
 )
