@@ -132,7 +132,7 @@ class TaskStepExecutionService:
             f"Steps for task {task.id}"
         )
         
-        messages = [LlmMessage(role="user", content=self._build_step_context(task, step, all_steps), additional_data={})]
+        messages = [LlmMessage.user(self._build_step_context(task, step, all_steps))]
         config = self._build_llm_config(step)
         logger = self.llm_logging_service.create_for_task(task.id)
         

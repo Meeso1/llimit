@@ -239,7 +239,7 @@ class TaskDecompositionService:
             user_prompt=user_prompt,
         )
         
-        return [LlmMessage(role="user", content=content, additional_data={})]
+        return [LlmMessage.user(content)]
 
     def _build_steps_description(self) -> str:
         complexity_levels = ", ".join([f'"{level.value}"' for level in ComplexityLevel])
@@ -343,7 +343,7 @@ class TaskDecompositionService:
             capabilities=capabilities,
         )
         
-        return [LlmMessage(role="user", content=content, additional_data={})]
+        return [LlmMessage.user(content)]
     
     def _build_failure_reevaluation_messages(
         self, 
@@ -396,7 +396,7 @@ class TaskDecompositionService:
             capabilities=capabilities,
         )
         
-        return [LlmMessage(role="user", content=content, additional_data={})]
+        return [LlmMessage.user(content)]
     
     def _build_reevaluation_steps_description(self) -> str:
         complexity_levels = ", ".join([f'"{level.value}"' for level in ComplexityLevel])

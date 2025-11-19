@@ -5,7 +5,7 @@ from fastapi.responses import StreamingResponse
 from app.api.dependencies import LLMServiceDep, CompletionStreamServiceDep, AuthContextDep
 from app.models.completion.requests import CompletionRequest
 from app.models.completion.responses import CompletionResponse
-from app.services.llm.llm_service_base import LlmMessage
+from app.services.llm.llm_message import LlmMessage
 
 router = APIRouter(
     prefix="/completions",
@@ -27,13 +27,7 @@ def _build_messages_from_request(request_body: CompletionRequest) -> list[LlmMes
         ]
     
     # Append the prompt as a user message
-    messages.append(
-        LlmMessage(
-            role="user",
-            content=request_body.prompt,
-            additional_data={},
-        )
-    )
+    messages.append(LlmMessage.user(request_body.prompt))
     
     return messages
 

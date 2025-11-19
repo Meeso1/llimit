@@ -7,7 +7,8 @@ from app.models.model.models import ModelDescription
 from app.services.llm.config.llm_config import LlmConfig
 from app.services.llm.config.reasoning_config import ReasoningConfig
 from app.services.llm.config.web_search_config import WebSearchConfig
-from app.services.llm.llm_service_base import LlmService, StreamedChunk, LlmMessage, LlmLogger
+from app.services.llm.llm_service_base import LlmService, StreamedChunk, LlmLogger
+from app.services.llm.llm_message import LlmMessage
 from app.services.model_cache_service import ModelCacheService
 from prompts.llm_base_prompts import BASE_SYSTEM_MESSAGE, ADDITIONAL_DATA_INSTRUCTIONS_TEMPLATE
 
@@ -269,11 +270,7 @@ class OpenRouterLlmService(LlmService):
         reasoning_data = self._extract_reasoning_from_message(message)
         additional_data.update(reasoning_data)
         
-        response_message = LlmMessage(
-            role="assistant",
-            content=cleaned_content,
-            additional_data=additional_data,
-        )
+        response_message = LlmMessage.assistant(cleaned_content, additional_data)
         
         if logger:
             logger.log_response(model, response_message, config)

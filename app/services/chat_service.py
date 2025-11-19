@@ -15,7 +15,8 @@ from app.models.chat.models import (
     ChatThread,
     ChatMessage,
 )
-from app.services.llm.llm_service_base import LlmMessage, LlmService
+from app.services.llm.llm_message import LlmMessage
+from app.services.llm.llm_service import LlmService
 from app.services.sse_service import SseService
 from app.events.thread_created import thread_created
 from prompts.chat_prompts import (
@@ -121,14 +122,7 @@ class ChatService:
         )
         
         return [
-            LlmMessage(
-                role="system",
-                content=CHAT_SYSTEM_MESSAGE_TEMPLATE.format(
-                    title=thread.title or "[Not set]",
-                    description=thread.description or "[Not set]",
-                ),
-                additional_data={},
-            ),
+            LlmMessage.system(CHAT_SYSTEM_MESSAGE_TEMPLATE.format(title=thread.title or "[Not set]", description=thread.description or "[Not set]")),
             *[LlmMessage(role=msg.role, content=msg.content, additional_data=msg.additional_data) for msg in messages],
         ]
     

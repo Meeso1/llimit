@@ -1,15 +1,9 @@
 from abc import abstractmethod, ABC
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import AsyncGenerator
 
 from app.services.llm.config.llm_config import LlmConfig
-
-
-@dataclass
-class LlmMessage:
-    role: str
-    content: str
-    additional_data: dict[str, str] = field(default_factory=dict)
+from app.services.llm.llm_message import LlmMessage
 
 
 @dataclass
