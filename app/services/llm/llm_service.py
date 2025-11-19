@@ -9,6 +9,7 @@ from app.services.llm.config.reasoning_config import ReasoningConfig
 from app.services.llm.config.web_search_config import WebSearchConfig
 from app.services.llm.llm_service_base import LlmService, StreamedChunk, LlmLogger
 from app.services.llm.llm_message import LlmMessage
+from app.services.llm.llm_file import LlmFileBase
 from app.services.model_cache_service import ModelCacheService
 from prompts.llm_base_prompts import BASE_SYSTEM_MESSAGE, ADDITIONAL_DATA_INSTRUCTIONS_TEMPLATE
 
@@ -89,6 +90,17 @@ class OpenRouterLlmService(LlmService):
                     status_code=400,
                     detail=f"Additional data key '{INTERNAL_REASONING_SUMMARY_KEY}' is reserved for internal use"
                 )
+
+    def _validate_supported_inputs(self, files: list[LlmFileBase], model_description: ModelDescription) -> None:
+        """Validate that the files are supported by the model"""
+        errors = []
+        for file in files:
+            validation_error = file.validate(model_description)
+            if validation_error:
+                errors.append(validation_error)
+        
+        if errors:
+            raise HTTPException(status_code=400, detail="\n".join(errors))
 
     def _build_reasoning_config(self, reasoning_config: ReasoningConfig, model_supports_reasoning: bool) -> dict | None:
         """Build reasoning configuration for OpenRouter API"""
@@ -207,6 +219,18 @@ class OpenRouterLlmService(LlmService):
         
         return chunks
     
+    def _build_messages(self, messages: list[LlmMessage], additional_requested_data: dict[str, str] | None) -> list[dict]:
+        openai_messages = []
+        
+        # Add system message with additional data instructions
+        system_msg = self._build_system_message(additional_requested_data)
+        openai_messages.append(LlmMessage.system(system_msg).to_dict())
+        
+        for msg in messages:
+            openai_messages.append(msg.to_dict())
+        
+        return openai_messages
+    
     async def get_completion(
         self,
         api_key: str,
@@ -220,8 +244,8 @@ class OpenRouterLlmService(LlmService):
         """
         Prompt a model and get an answer using OpenRouter.
         """
-        # Validate additional_requested_data
         self._validate_additional_requested_data(additional_requested_data)
+        self._validate_supported_inputs(messages, model_desc)
         
         # Validate model and get description
         model_desc = await self._model_cache_service.get_model_by_id(model)
@@ -239,19 +263,9 @@ class OpenRouterLlmService(LlmService):
             api_key=api_key,
         )
         
-        # Build messages for OpenAI format
-        openai_messages = []
-        
-        # Add system message with additional data instructions
-        system_msg = self._build_system_message(additional_requested_data)
-        openai_messages.append({"role": "system", "content": system_msg})
-        
-        for msg in messages:
-            openai_messages.append({"role": msg.role, "content": msg.content})
-        
+        openai_messages = self._build_messages(messages, additional_requested_data)
         extra_body = self._build_extra_body(config, model_desc)
         
-        # Make API call
         response = await client.chat.completions.create(
             model=model,
             messages=openai_messages,
@@ -369,8 +383,8 @@ class OpenRouterLlmService(LlmService):
         """
         Stream completion from OpenRouter, parsing additional data tags on the fly.
         """
-        # Validate additional_requested_data
         self._validate_additional_requested_data(additional_requested_data)
+        self._validate_supported_inputs(messages, model_desc)
         
         # Validate model and get description
         model_desc = await self._model_cache_service.get_model_by_id(model)
@@ -386,19 +400,9 @@ class OpenRouterLlmService(LlmService):
             api_key=api_key,
         )
         
-        # Build messages for OpenAI format
-        openai_messages = []
-        
-        # Add system message with additional data instructions
-        system_msg = self._build_system_message(additional_requested_data)
-        openai_messages.append({"role": "system", "content": system_msg})
-        
-        for msg in messages:
-            openai_messages.append({"role": msg.role, "content": msg.content})
-        
+        openai_messages = self._build_messages(messages, additional_requested_data)
         extra_body = self._build_extra_body(config, model_desc)
         
-        # Make streaming API call
         stream = await client.chat.completions.create(
             model=model,
             messages=openai_messages,
