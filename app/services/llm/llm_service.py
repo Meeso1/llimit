@@ -42,7 +42,7 @@ class OpenRouterLlmService(LlmService):
         self,
         config: WebSearchConfig,
         model_supports_native: bool,
-    ) -> tuple[list[dict] | None, dict | None]:
+    ) -> tuple[list[dict], dict | None]:
         """
         Build web search configuration for OpenRouter API.
         Returns: (plugins_config, web_search_options)
@@ -50,7 +50,7 @@ class OpenRouterLlmService(LlmService):
         if not config.is_enabled():
             return None, None
 
-        plugins = None
+        plugins = []
         web_search_options = None
 
         # Determine which engines to use based on config and model support
