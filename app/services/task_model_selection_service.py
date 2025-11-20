@@ -51,6 +51,9 @@ class TaskModelSelectionService:
             
             required_modalities.extend(file_metadata.get_required_modalities())
 
+        if len(step.required_file_ids) > 0:
+            models = [model for model in models if "file" in model.architecture.input_modalities]
+
         return [model for model in models if all(modality in model.architecture.input_modalities for modality in required_modalities)]
 
     def _filter_by_capability(self, models: list[ModelDescription], capability: ModelCapability) -> list[ModelDescription]:
