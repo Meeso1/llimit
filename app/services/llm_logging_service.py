@@ -34,6 +34,7 @@ class TaskLlmLogger(LlmLogger):
             f.write(f"Config:\n")
             f.write(f"\tReasoning: {config.reasoning.effort if config.reasoning else 'None'}\n")
             f.write(f"\tWeb Search: Exa: {config.web_search.use_exa_search}, Native: {config.web_search.use_native_search}\n")
+            f.write(f"\tPDF: {config.pdf.engine}\n")
             
             if additional_requested_data:
                 f.write(f"\nAdditional Requested Data:\n")
@@ -72,6 +73,7 @@ class TaskLlmLogger(LlmLogger):
             f.write(f"Config:\n")
             f.write(f"\tReasoning: {config.reasoning.effort if config.reasoning else 'None'}\n")
             f.write(f"\tWeb Search: Exa: {config.web_search.use_exa_search}, Native: {config.web_search.use_native_search}\n")
+            f.write(f"\tPDF: {config.pdf.engine}\n")
             
             f.write(f"\nRole: {response.role}\n")
             f.write(f"{response.content}\n")
