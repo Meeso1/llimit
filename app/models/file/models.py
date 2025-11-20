@@ -28,3 +28,14 @@ class FileMetadata:
             created_at=self.created_at,
         )
 
+    def get_required_modalities(self) -> list[str]:
+        """Get the required modalities for the file"""
+        if self.content_type.startswith("image/"):
+            return ["image"]
+        elif self.content_type.startswith("audio/"):
+            return ["audio"]
+        elif self.content_type.startswith("video/"):
+            return ["video"]
+
+        return []
+

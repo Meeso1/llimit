@@ -95,6 +95,22 @@ class FileRepo:
             return None
         
         return self._row_to_file_metadata(rows[0])
+
+    def get_file_by_id(self, file_id: str) -> FileMetadata | None:
+        """Get a file by ID"""
+        rows = self.db.execute_query(
+            """
+            SELECT id, user_id, filename, description, content_type, size_bytes, storage_path, url, created_at
+            FROM files
+            WHERE id = ?
+            """,
+            (file_id,),
+        )
+        
+        if not rows:
+            return None
+        
+        return self._row_to_file_metadata(rows[0])
     
     def list_files_by_user(self, user_id: str) -> list[FileMetadata]:
         """List all files for a specific user"""

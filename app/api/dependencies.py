@@ -38,7 +38,10 @@ _llm_logging_service_instance = LlmLoggingService()
 _sse_service_instance = SseService()
 _api_key_service_instance = ApiKeyService(_api_key_repo_instance)
 _auth_service_instance = AuthService(_api_key_service_instance)
-_task_model_selection_service_instance = TaskModelSelectionService()
+_task_model_selection_service_instance = TaskModelSelectionService(
+    model_cache_service=_model_cache_service_instance,
+    file_repo=_file_repo_instance,
+)
 _chat_service_instance = ChatService(
     llm_service=_llm_service_instance,
     chat_repo=_chat_repo_instance,
