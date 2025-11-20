@@ -5,6 +5,7 @@ import re
 
 from app.models.model.models import ModelDescription
 from app.services.llm.config.llm_config import LlmConfig
+from app.services.llm.config.pdf_config import PdfConfig, PdfEngine
 from app.services.llm.config.reasoning_config import ReasoningConfig
 from app.services.llm.config.web_search_config import WebSearchConfig
 from app.services.llm.llm_service_base import LlmService, StreamedChunk, LlmLogger
@@ -115,28 +116,54 @@ class OpenRouterLlmService(LlmService):
             "effort": reasoning_config.effort.value
         }
 
+    def _build_pdf_processing_config(self, pdf_config: PdfConfig, model_supports_native: bool) -> list[dict] | None:
+        """
+        Build PDF processing configuration for OpenRouter API.
+        Returns plugins configuration.
+        """
+        engine = "pdf-text"
+        if pdf_config.engine == PdfEngine.NATIVE and model_supports_native:
+            engine = "native"
+        elif pdf_config.engine == PdfEngine.MISTRAL_OCR:
+            engine = "mistral-ocr"
+        
+        return [{
+            "id": "file-parser",
+            "pdf": {
+                "engine": engine
+            }
+        }]
+
     def _build_extra_body(self, config: LlmConfig | None, model_description: ModelDescription) -> dict | None:
         """Build extra body for OpenRouter API"""
         if config is None:
             return None
         
         extra_body = {}
+        plugins = []
         
         # Add web search config
         if config.web_search.is_enabled():
-            plugins, web_search_options = self._build_web_search_config(
+            web_search_plugins, web_search_options = self._build_web_search_config(
                 config.web_search, 
                 model_description.supports_native_web_search
             )
-            if plugins:
-                extra_body["plugins"] = plugins
+            plugins.extend(web_search_plugins)
+            
             if web_search_options:
                 extra_body["web_search_options"] = web_search_options
+                
+        # Add PDF processing config
+        pdf_plugins = self._build_pdf_processing_config(config.pdf, "file" in model_description.architecture.input_modalities)
+        plugins.extend(pdf_plugins)
         
         # Add reasoning config
         reasoning_config = self._build_reasoning_config(config.reasoning, model_description.supports_reasoning)
         if reasoning_config:
             extra_body["reasoning"] = reasoning_config
+            
+        if plugins:
+            extra_body["plugins"] = plugins
         
         return extra_body if extra_body else None
 

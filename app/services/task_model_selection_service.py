@@ -51,9 +51,6 @@ class TaskModelSelectionService:
             
             required_modalities.extend(file_metadata.get_required_modalities())
 
-        if len(step.required_file_ids) > 0:
-            models = [model for model in models if "file" in model.architecture.input_modalities]
-
         return [model for model in models if all(modality in model.architecture.input_modalities for modality in required_modalities)]
 
     def _filter_by_capability(self, models: list[ModelDescription], capability: ModelCapability) -> list[ModelDescription]:
@@ -64,5 +61,11 @@ class TaskModelSelectionService:
                 return models
             case ModelCapability.NATIVE_WEB_SEARCH:
                 return [model for model in models if model.supports_native_web_search]
+            case ModelCapability.OCR_PDF:
+                return models
+            case ModelCapability.TEXT_PDF:
+                return models
+            case ModelCapability.NATIVE_PDF:
+                return [model for model in models if "file" in model.architecture.input_modalities]
             case _:
                 raise TaskModelSelectionError(f"Unknown capability: {capability}")

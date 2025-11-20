@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from app.db.file_repo import FileRepo
 from app.db.task_repo import TaskRepo
 from app.services.llm.config.llm_config import LlmConfig
+from app.services.llm.config.pdf_config import PdfConfig
 from app.services.llm.config.reasoning_config import ReasoningConfig
 from app.services.llm.config.web_search_config import WebSearchConfig
 from app.services.llm_logging_service import LlmLoggingService
@@ -232,6 +233,7 @@ class TaskDecompositionService:
             config=LlmConfig(
                 reasoning=ReasoningConfig.with_medium_effort(),
                 web_search=WebSearchConfig.default(),
+                pdf=PdfConfig.default(),
             ),
             logger=logger,
         )
@@ -303,6 +305,7 @@ class TaskDecompositionService:
             config=LlmConfig(
                 reasoning=ReasoningConfig.with_medium_effort(),
                 web_search=WebSearchConfig.default(),
+                pdf=PdfConfig.default(),
             ),
             logger=logger,
         )

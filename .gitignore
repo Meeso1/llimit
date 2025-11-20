@@ -22,3 +22,6 @@ user.env
 
 # UV
 .python-version
+
+# API tests
+api_tests.ipynb

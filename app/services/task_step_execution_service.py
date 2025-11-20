@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from app.db.file_repo import FileRepo
 from app.db.task_repo import TaskRepo
 from app.services.file_service import FileService
+from app.services.llm.config.pdf_config import PdfConfig, PdfEngine
 from app.services.llm.llm_file import LlmFileBase
 from app.services.llm_logging_service import LlmLoggingService
 from utils import not_none
@@ -97,12 +98,24 @@ class TaskStepExecutionService:
             return ReasoningConfig.default()
         
         return ReasoningConfig.with_medium_effort()
+    
+    def _build_pdf_config(self, step: NormalTaskStep) -> PdfConfig:
+        """Build PDF configuration based on step's required capabilities"""
+        if ModelCapability.OCR_PDF in step.required_capabilities:
+            return PdfConfig(engine=PdfEngine.MISTRAL_OCR)
+        elif ModelCapability.TEXT_PDF in step.required_capabilities:
+            return PdfConfig(engine=PdfEngine.PDF_TEXT)
+        elif ModelCapability.NATIVE_PDF in step.required_capabilities:
+            return PdfConfig(engine=PdfEngine.NATIVE)
+        else:
+            return PdfConfig.default()
 
     def _build_llm_config(self, step: NormalTaskStep) -> LlmConfig:
         """Build LLM configuration based on step's required capabilities"""
         return LlmConfig(
             web_search=self._build_web_search_config(step),
             reasoning=self._build_reasoning_config(step),
+            pdf=self._build_pdf_config(step),
         )
     
     async def execute_step(

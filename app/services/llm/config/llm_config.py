@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from app.services.llm.config.pdf_config import PdfConfig
 from app.services.llm.config.reasoning_config import ReasoningConfig
 from app.services.llm.config.web_search_config import WebSearchConfig
 
@@ -9,6 +10,7 @@ class LlmConfig:
     """Configuration for LLM completion requests"""
     web_search: WebSearchConfig
     reasoning: ReasoningConfig
+    pdf: PdfConfig
 
     @classmethod
     def default(cls) -> "LlmConfig":
@@ -16,5 +18,6 @@ class LlmConfig:
         return cls(
             web_search=WebSearchConfig.default(),
             reasoning=ReasoningConfig.default(),
+            pdf=PdfConfig.default(),
         )
 
