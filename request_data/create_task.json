@@ -1,4 +1,5 @@
 {
-  "prompt": "I want to learn a new programming language. I already know C# and Python. Please research popular programming languages, focusing on their differences from Python and C#, as well as how practical they are for backend development, and low-level development - I want something usable in those 2 areas, while also significantly different from what I already know."
+  "prompt": "I've attached 2 files: RouteLLM paper, and a picture of the architecture of the model. Please do the following: 1. Read the paper and extract information about models/methods used to route LLMs. 2. For each model/method, briefly describe how it works. It is a good idea to use web search for each to get up-to-date info. 3. Inspect attached image, and try to determine which of the models mentioned in the paper is shown on the image.",
+  "file_ids": ["0ba98478-b3ea-47ef-a4b8-2ff29b48d9a3", "c91dc2ce-4b45-4b04-8bd6-0c6967516be9"]
 }
 

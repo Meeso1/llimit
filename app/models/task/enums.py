@@ -34,8 +34,6 @@ class ModelCapability(str, Enum):
     REASONING = "reasoning"
     EXA_SEARCH = "exa_search"
     NATIVE_WEB_SEARCH = "native_web_search"
-    IMAGE_INPUT = "image_input"
-    FILE_INPUT = "file_input"
 
     @staticmethod
     def descriptions() -> dict[str, str]:

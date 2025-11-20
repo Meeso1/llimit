@@ -145,7 +145,7 @@ class OpenRouterLlmService(LlmService):
         additional_data: dict[str, str] = {}
         
         # Find all additional_data tags (format: <additional_data key=NAME>VALUE</additional_data>)
-        pattern = r'<additional_data key=([^>]+)>(.+?)</additional_data>'
+        pattern = r'<additional_data key=([^>]+)>(.*?)</additional_data>'
         matches = re.findall(pattern, content, re.DOTALL)
         
         for key, value in matches:

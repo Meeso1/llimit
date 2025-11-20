@@ -121,15 +121,9 @@ class TaskStepExecutionService:
         
         task = not_none(self.task_repo.get_task_by_id(task_id, user_id), f"Task {task_id}")
         
-        # Normal step execution
         if step.model_name is None:
-            step_def = NormalTaskStepDefinition(
-                prompt=step.prompt,
-                step_type=step.step_type,
-                complexity=step.complexity,
-                required_capabilities=step.required_capabilities,
-            )
-            model_name = self.model_selection_service.select_model_for_step(step_def)
+            step_def = step.to_step_definition()
+            model_name = await self.model_selection_service.select_model_for_step(step_def)
             
             updated_step = not_none(self.task_repo.update_task_step(
                 step_id=step.id,

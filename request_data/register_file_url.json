@@ -1,7 +1,7 @@
 {
-    "url": "https://picsum.photos/200/300",
-    "filename": "random-image.jpg",
-    "content_type": "image/jpeg",
-    "description": "A random image from Lorem Picsum"
+    "url": "https://machinelearningmastery.com/wp-content/uploads/2021/08/attention_research_1.png",
+    "filename": "architecture.png",
+    "content_type": "image/png",
+    "description": "Model architecture diagram"
 }
 

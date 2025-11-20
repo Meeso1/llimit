@@ -170,8 +170,8 @@ class TaskRepo:
             self.db.execute_update(
                 """
                 INSERT INTO task_steps 
-                (id, task_id, step_number, prompt, status, step_type, step_details, required_file_ids)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (id, task_id, step_number, prompt, status, step_type, step_details)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(uuid4()),
@@ -181,7 +181,6 @@ class TaskRepo:
                     StepStatus.PENDING.value,
                     step_def.step_type.value,
                     step_details,
-                    json.dumps(step_def.required_file_ids),
                 ),
             )
         
@@ -310,7 +309,7 @@ class TaskRepo:
             completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
             steps_generated=bool(row["steps_generated"]),
             output=row["output"],
-            attached_file_ids=json.loads(row["attached_file_ids"]) if row.get("attached_file_ids") else [],
+            attached_file_ids=json.loads(row["attached_file_ids"]),
         )
     
     def get_step_by_id(self, step_id: str) -> TaskStep | None:
@@ -348,12 +347,11 @@ class TaskRepo:
         
         if step_type == StepType.NORMAL:
             capabilities = [ModelCapability(cap) for cap in step_details["required_capabilities"]]
-            required_file_ids = step_details.get("required_file_ids", [])
             return NormalTaskStep(
                 **common_fields,
                 complexity=ComplexityLevel(step_details["complexity"]),
                 required_capabilities=capabilities,
-                required_file_ids=required_file_ids,
+                required_file_ids=step_details["required_file_ids"],
                 model_name=row["model_name"],
                 output=row["output"],
                 failure_reason=row["failure_reason"],

@@ -37,6 +37,6 @@ class LlmMessage:
                 {
                     "type": "text",
                     "text": self.content
-                }
+                },
                 *[file.to_dict() for file in self.files]
             ]

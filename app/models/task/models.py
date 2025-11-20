@@ -75,8 +75,18 @@ class NormalTaskStep(TaskStep):
             output=self.output,
             failure_reason=self.failure_reason,
             is_planned=None,
+            required_file_ids=self.required_file_ids,
             started_at=self.started_at,
             completed_at=self.completed_at,
+        )
+
+    def to_step_definition(self) -> "NormalTaskStepDefinition":
+        return NormalTaskStepDefinition(
+            prompt=self.prompt,
+            step_type=self.step_type,
+            complexity=self.complexity,
+            required_capabilities=self.required_capabilities,
+            required_file_ids=self.required_file_ids,
         )
 
 
@@ -100,8 +110,16 @@ class ReevaluateTaskStep(TaskStep):
             output=None,
             failure_reason=None,
             is_planned=self.is_planned,
+            required_file_ids=None,
             started_at=self.started_at,
             completed_at=self.completed_at,
+        )
+
+    def to_step_definition(self) -> "ReevaluateTaskStepDefinition":
+        return ReevaluateTaskStepDefinition(
+            prompt=self.prompt,
+            step_type=self.step_type,
+            is_planned=self.is_planned,
         )
 
 

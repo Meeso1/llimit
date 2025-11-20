@@ -16,6 +16,7 @@ Example:
 Only include additional data that was requested in this prompt.
 All additional data fields should be included in the response, unless otherwise specified by their description.
 All additional data values should be plain text, unless otherwise specified.
+All additional data specified should have non-empty value (if it is included in the response). This is very important.
 
 Additional data requested:
 """

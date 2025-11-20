@@ -35,6 +35,7 @@ class TaskStepResponse(BaseModel):
     output: str | None = Field(None, description="Concise output from the step")
     failure_reason: str | None = Field(None, description="Reason for step failure if the step could not be completed (only for normal steps)")
     is_planned: bool | None = Field(None, description="Whether this reevaluation was planned or triggered by a step failure (only for reevaluation steps)")
+    required_file_ids: list[str] | None = Field(None, description="Files required for this step (not applicable for reevaluation steps)")
     started_at: datetime | None
     completed_at: datetime | None
 

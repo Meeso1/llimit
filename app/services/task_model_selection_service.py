@@ -1,4 +1,4 @@
-from random import random
+import random
 from app.db.file_repo import FileRepo
 from app.models.model.models import ModelDescription
 from app.models.task.enums import ModelCapability
@@ -15,11 +15,11 @@ class TaskModelSelectionService:
         self.model_cache_service = model_cache_service
         self.file_repo = file_repo
     
-    def select_model_for_step(
+    async def select_model_for_step(
         self,
         step: NormalTaskStepDefinition
     ) -> str:
-        models = self.model_cache_service.get_all_models()
+        models = await self.model_cache_service.get_all_models()
         models = self._filter_by_input_modalities(step, models)
         for capability in step.required_capabilities:
             models = self._filter_by_capability(models, capability)
