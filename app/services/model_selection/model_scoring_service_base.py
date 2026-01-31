@@ -8,8 +8,7 @@ class ModelScoringServiceBase(ABC):
     async def get_model_scores(
         self,
         models_to_score: list[str],
-        prompts: list[str],
-        batch_size: int = 128
+        prompts: list[str]
     ) -> dict[str, list[float]]:
         """Get scores for models based on prompts."""
         pass

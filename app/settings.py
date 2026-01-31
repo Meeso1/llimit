@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     preserve_old_db: bool = False
     model_selection_api_base_url: str = "http://localhost:8001"
     model_selection_api_model: str = "dense_network/default_model"
+    model_selection_api_batch_size: int = 128
     use_dummy_model_scoring: bool = False
     
     class Config:

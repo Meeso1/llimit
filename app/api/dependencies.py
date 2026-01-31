@@ -44,6 +44,7 @@ _auth_service_instance = AuthService(_api_key_service_instance)
 _model_scoring_api_service_instance = ModelScoringApiService(
     base_url=settings.model_selection_api_base_url,
     model=settings.model_selection_api_model,
+    batch_size=settings.model_selection_api_batch_size,
 )
 _dummy_model_scoring_service_instance = DummyModelScoringService()
 _task_model_selection_service_instance = TaskModelSelectionService(

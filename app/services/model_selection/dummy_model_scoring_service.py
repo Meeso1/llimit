@@ -8,8 +8,7 @@ class DummyModelScoringService(ModelScoringServiceBase):
     async def get_model_scores(
         self,
         models_to_score: list[str],
-        prompts: list[str],
-        batch_size: int = 128
+        prompts: list[str]
     ) -> dict[str, list[float]]:
         """Get dummy scores for models."""
         gemini_flash = "google/gemini-2.5-flash-lite"

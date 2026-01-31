@@ -11,9 +11,10 @@ class ModelScoringApiError(Exception):
 class ModelScoringApiService(ModelScoringServiceBase):
     """Service for interacting with the model scoring API."""
     
-    def __init__(self, base_url: str, model: str) -> None:
+    def __init__(self, base_url: str, model: str, batch_size: int) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
+        self.batch_size = batch_size
         self.client = httpx.AsyncClient(timeout=30.0)
     
     async def health_check(self) -> None:
@@ -29,15 +30,14 @@ class ModelScoringApiService(ModelScoringServiceBase):
     async def get_model_scores(
         self,
         models_to_score: list[str],
-        prompts: list[str],
-        batch_size: int = 128
+        prompts: list[str]
     ) -> dict[str, list[float]]:
         """Get scores for models based on prompts."""
         request = ModelScoringRequest(
             model=self.model,
             models_to_score=models_to_score,
             prompts=prompts,
-            batch_size=batch_size
+            batch_size=self.batch_size
         )
         
         try:
