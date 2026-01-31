@@ -1,9 +1,9 @@
-import random
 from app.db.file_repo import FileRepo
 from app.models.model.models import ModelDescription
 from app.models.task.enums import ModelCapability
 from app.models.task.models import NormalTaskStepDefinition
 from app.services.model_cache_service import ModelCacheService
+from app.services.model_selection.model_scoring_service_base import ModelScoringServiceBase
 
 
 class TaskModelSelectionError(Exception):
@@ -11,9 +11,15 @@ class TaskModelSelectionError(Exception):
 
 
 class TaskModelSelectionService:    
-    def __init__(self, model_cache_service: ModelCacheService, file_repo: FileRepo) -> None:
+    def __init__(
+        self,
+        model_cache_service: ModelCacheService,
+        file_repo: FileRepo,
+        model_scoring_service: ModelScoringServiceBase
+    ) -> None:
         self.model_cache_service = model_cache_service
         self.file_repo = file_repo
+        self.model_scoring_service = model_scoring_service
     
     async def select_model_for_step(
         self,
@@ -28,16 +34,8 @@ class TaskModelSelectionService:
             # TODO: This should trigger a reevaluation step
             raise TaskModelSelectionError("No models found that meet requirements")
         
-        # TODO: Implement scoring etc.
-
         model_ids = [model.id for model in models]
-        if "google/gemini-2.5-flash-lite" in model_ids:
-            return "google/gemini-2.5-flash-lite"
-
-        elif "google/gemini-2.5-pro" in model_ids:
-            return "google/gemini-2.5-pro"
-        
-        return random.choice(model_ids)
+        return await self._score_and_select_best_model(model_ids, step)
 
     def _filter_by_input_modalities(self, step: NormalTaskStepDefinition, models: list[ModelDescription]) -> list[ModelDescription]:
         """Filter models by input modalities"""
@@ -69,3 +67,23 @@ class TaskModelSelectionService:
                 return [model for model in models if "file" in model.architecture.input_modalities]
             case _:
                 raise TaskModelSelectionError(f"Unknown capability: {capability}")
+    
+    async def _score_and_select_best_model(
+        self,
+        model_ids: list[str],
+        step: NormalTaskStepDefinition
+    ) -> str:
+        """Score models using the API and select the best one."""
+        try:
+            scores = await self.model_scoring_service.get_model_scores(
+                models_to_score=model_ids,
+                prompts=[step.prompt]
+            )
+            
+            # TODO: Take costs into account
+            best_model, _ = max(scores.items(), key=lambda x: x[1][0])
+            return best_model
+        except Exception as e:
+            raise TaskModelSelectionError(
+                f"Failed to select model: {str(e)}"
+            ) from e

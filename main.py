@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
-from app.api.dependencies import get_database, get_user_repo, get_api_key_service, get_work_queue_service
+from app.api.dependencies import get_database, get_user_repo, get_api_key_service, initialize_services, dispose_services
 from app.api.routes.api_keys import router as api_keys_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.completions import router as completions_router
@@ -51,10 +51,9 @@ def custom_openapi(app: FastAPI):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI application startup and shutdown"""
-    work_queue_service = get_work_queue_service()
-    work_queue_service.start_processing()
+    await initialize_services()
     yield
-    await work_queue_service.stop_processing()
+    await dispose_services()
 
 
 def create_app() -> FastAPI:

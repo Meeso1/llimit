@@ -18,12 +18,15 @@ from app.services.llm.llm_service_base import LlmService
 from app.services.llm.llm_service import OpenRouterLlmService
 from app.services.llm_logging_service import LlmLoggingService
 from app.services.model_cache_service import ModelCacheService
+from app.services.model_selection.model_selection_api_service import ModelScoringApiService
+from app.services.model_selection.dummy_model_scoring_service import DummyModelScoringService
 from app.services.sse_service import SseService
 from app.services.task_decomposition_service import TaskDecompositionService
 from app.services.task_model_selection_service import TaskModelSelectionService
 from app.services.task_creation_service import TaskCreationService
 from app.services.task_step_execution_service import TaskStepExecutionService
 from app.services.work_queue_service import WorkQueueService
+from app.settings import settings
 
 # Singleton instances
 _database_instance = Database()
@@ -38,9 +41,17 @@ _llm_logging_service_instance = LlmLoggingService()
 _sse_service_instance = SseService()
 _api_key_service_instance = ApiKeyService(_api_key_repo_instance)
 _auth_service_instance = AuthService(_api_key_service_instance)
+_model_scoring_api_service_instance = ModelScoringApiService(
+    base_url=settings.model_selection_api_base_url,
+    model=settings.model_selection_api_model,
+)
+_dummy_model_scoring_service_instance = DummyModelScoringService()
 _task_model_selection_service_instance = TaskModelSelectionService(
     model_cache_service=_model_cache_service_instance,
     file_repo=_file_repo_instance,
+    model_scoring_service=_dummy_model_scoring_service_instance \
+        if settings.use_dummy_model_scoring \
+        else _model_scoring_api_service_instance,
 )
 _chat_service_instance = ChatService(
     llm_service=_llm_service_instance,
@@ -199,6 +210,17 @@ LLMServiceDep = Annotated[LlmService, Depends(get_llm_service)]
 ModelCacheServiceDep = Annotated[ModelCacheService, Depends(get_model_cache_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 SseServiceDep = Annotated[SseService, Depends(get_sse_service)]
+
+
+# Register stuff that needs to happen when app starts here
+async def initialize_services():
+    _work_queue_service_instance.start_processing()
+
+
+# Register stuff that needs to happen when app exits here
+async def dispose_services():
+    await _work_queue_service_instance.stop_processing()
+    await _model_scoring_api_service_instance.close()
 
 
 def AuthContextDep(require_openrouter_key: bool = True):
