@@ -8,6 +8,7 @@ from app.db.chat_repo import ChatRepo
 from app.db.database import Database
 from app.db.file_repo import FileRepo
 from app.db.task_repo import TaskRepo
+from app.db.task_cost_repo import TaskCostRepo
 from app.db.user_repo import UserRepo
 from app.services.api_key_service import ApiKeyService
 from app.services.auth_service import AuthService
@@ -25,6 +26,8 @@ from app.services.task_decomposition_service import TaskDecompositionService
 from app.services.task_model_selection_service import TaskModelSelectionService
 from app.services.task_creation_service import TaskCreationService
 from app.services.task_step_execution_service import TaskStepExecutionService
+from app.services.prompt_pricing_service import PromptPricingService
+from app.services.task_query_service import TaskQueryService
 from app.services.work_queue_service import WorkQueueService
 from app.settings import settings
 
@@ -35,7 +38,10 @@ _api_key_repo_instance = ApiKeyRepo(_database_instance)
 _chat_repo_instance = ChatRepo(_database_instance)
 _file_repo_instance = FileRepo(_database_instance)
 _task_repo_instance = TaskRepo(_database_instance)
+_task_cost_repo_instance = TaskCostRepo(_database_instance)
 _model_cache_service_instance = ModelCacheService()
+_prompt_pricing_service_instance = PromptPricingService(_model_cache_service_instance)
+_task_query_service_instance = TaskQueryService(_task_repo_instance, _task_cost_repo_instance)
 _llm_service_instance = OpenRouterLlmService(_model_cache_service_instance)
 _llm_logging_service_instance = LlmLoggingService()
 _sse_service_instance = SseService()
@@ -67,6 +73,8 @@ _task_decomposition_service_instance = TaskDecompositionService(
     file_repo=_file_repo_instance,
     sse_service=_sse_service_instance,
     llm_logging_service=_llm_logging_service_instance,
+    pricing_service=_prompt_pricing_service_instance,
+    cost_repo=_task_cost_repo_instance,
 )
 _task_step_execution_service_instance = TaskStepExecutionService(
     task_repo=_task_repo_instance,
@@ -76,6 +84,8 @@ _task_step_execution_service_instance = TaskStepExecutionService(
     sse_service=_sse_service_instance,
     model_selection_service=_task_model_selection_service_instance,
     llm_logging_service=_llm_logging_service_instance,
+    pricing_service=_prompt_pricing_service_instance,
+    cost_repo=_task_cost_repo_instance,
 )
 _work_queue_service_instance = WorkQueueService(
     task_repo=_task_repo_instance,
@@ -118,6 +128,21 @@ def get_api_key_repo() -> ApiKeyRepo:
 def get_task_repo() -> TaskRepo:
     """Get the singleton TaskRepo instance"""
     return _task_repo_instance
+
+
+def get_task_cost_repo() -> TaskCostRepo:
+    """Get the singleton TaskCostRepo instance"""
+    return _task_cost_repo_instance
+
+
+def get_prompt_pricing_service() -> PromptPricingService:
+    """Get the singleton PromptPricingService instance"""
+    return _prompt_pricing_service_instance
+
+
+def get_task_query_service() -> TaskQueryService:
+    """Get the singleton TaskQueryService instance"""
+    return _task_query_service_instance
 
 
 def get_work_queue_service() -> WorkQueueService:
@@ -207,6 +232,7 @@ FileServiceDep = Annotated[FileService, Depends(get_file_service)]
 CompletionStreamServiceDep = Annotated[CompletionStreamService, Depends(get_completion_stream_service)]
 TaskCreationServiceDep = Annotated[TaskCreationService, Depends(get_task_creation_service)]
 TaskRepoDep = Annotated[TaskRepo, Depends(get_task_repo)]
+TaskQueryServiceDep = Annotated[TaskQueryService, Depends(get_task_query_service)]
 LLMServiceDep = Annotated[LlmService, Depends(get_llm_service)]
 ModelCacheServiceDep = Annotated[ModelCacheService, Depends(get_model_cache_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]

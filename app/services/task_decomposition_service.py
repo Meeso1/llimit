@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from app.db.file_repo import FileRepo
 from app.db.task_repo import TaskRepo
+from app.db.task_cost_repo import TaskCostRepo
 from app.services.llm.config.llm_config import LlmConfig
 from app.services.llm.config.pdf_config import PdfConfig
 from app.services.llm.config.reasoning_config import ReasoningConfig
@@ -12,6 +13,7 @@ from utils import not_none
 from app.events.task_events import create_task_step_completed_event, create_task_steps_generated_event, create_task_steps_regenerated_event
 from app.services.llm.llm_service_base import LlmService, LlmMessage
 from app.services.sse_service import SseService
+from app.services.prompt_pricing_service import PromptPricingService
 from app.models.task.models import (
     TaskDecompositionResult,
     TaskStepDefinition,
@@ -51,12 +53,16 @@ class TaskDecompositionService:
         file_repo: FileRepo,
         sse_service: SseService,
         llm_logging_service: LlmLoggingService,
+        pricing_service: PromptPricingService,
+        cost_repo: TaskCostRepo,
     ) -> None:
         self.llm_service = llm_service
         self.task_repo = task_repo
         self.file_repo = file_repo
         self.sse_service = sse_service
         self.llm_logging_service = llm_logging_service
+        self.pricing_service = pricing_service
+        self.cost_repo = cost_repo
 
     def _format_capabilities(self) -> str:
         """Format capabilities with their descriptions for prompts."""
@@ -124,7 +130,7 @@ class TaskDecompositionService:
         )
         
         if len(steps) > 0:
-            return [WorkQueueItem.make_task_step_execution_item(task, steps[0].id, api_key)]
+            return [WorkQueueItem.make_task_step_execution_item(updated_task, steps[0].id, api_key)]
         
         return []
     
@@ -220,10 +226,11 @@ class TaskDecompositionService:
         """Decomposes a user task into a structured sequence of steps."""
         messages = self._build_messages(task)
         logger = self.llm_logging_service.create_for_task(task.id)
+        model_id = "google/gemini-2.5-pro"
         
         response = await self.llm_service.get_completion(
             api_key=api_key,
-            model="google/gemini-2.5-pro",
+            model=model_id,
             messages=messages,
             additional_requested_data={
                 "title": TASK_TITLE_DESCRIPTION,
@@ -237,6 +244,9 @@ class TaskDecompositionService:
             ),
             logger=logger,
         )
+        
+        # Track cost for this LLM call
+        self.cost_repo.add_cost_increment(task.id, await self.pricing_service.calculate_cost(model_id, response, []))
         
         return self._parse_response(response, task)
     
@@ -293,10 +303,11 @@ class TaskDecompositionService:
             messages = self._build_failure_reevaluation_messages(task, reevaluate_step, previous_steps, abandoned_steps)
         
         logger = self.llm_logging_service.create_for_task(task.id)
+        model_id = "google/gemini-2.5-pro"
         
         response = await self.llm_service.get_completion(
             api_key=api_key,
-            model="google/gemini-2.5-pro",
+            model=model_id,
             messages=messages,
             additional_requested_data={
                 "steps": self._build_reevaluation_steps_description(),
@@ -309,6 +320,9 @@ class TaskDecompositionService:
             ),
             logger=logger,
         )
+        
+        # Track cost for this LLM call
+        self.cost_repo.add_cost_increment(task.id, await self.pricing_service.calculate_cost(model_id, response, []))
         
         return self._parse_reevaluation_response(response, task)
     
@@ -329,8 +343,8 @@ class TaskDecompositionService:
         )
     
     def _build_planned_reevaluation_messages(
-        self, 
-        task: Task, 
+        self,
+        task: Task,
         reevaluate_step: ReevaluateTaskStep,
         previous_steps: list[TaskStep],
         abandoned_steps: list[TaskStep],
@@ -371,8 +385,8 @@ class TaskDecompositionService:
         return [LlmMessage.user(content)]
     
     def _build_failure_reevaluation_messages(
-        self, 
-        task: Task, 
+        self,
+        task: Task,
         reevaluate_step: ReevaluateTaskStep,
         previous_steps: list[TaskStep],
         abandoned_steps: list[TaskStep],

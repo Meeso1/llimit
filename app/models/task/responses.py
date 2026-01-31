@@ -15,6 +15,7 @@ class TaskResponse(BaseModel):
         description="Whether the task has been decomposed into steps yet"
     )
     output: str | None = Field(None, description="Output from the last step of the task")
+    total_cost_usd: float = Field(description="Total cost of the task in USD")
 
 
 class TaskListResponse(BaseModel):

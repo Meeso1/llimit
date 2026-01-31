@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.api.dependencies import AuthContextDep, TaskCreationServiceDep, TaskRepoDep
+from app.api.dependencies import AuthContextDep, TaskCreationServiceDep, TaskRepoDep, TaskQueryServiceDep
 from app.models.task.requests import CreateTaskRequest
 from app.models.task.responses import (
     TaskResponse,
@@ -37,10 +37,10 @@ async def create_task(
 @router.get("", response_model=TaskListResponse)
 async def list_tasks(
     context: AuthContextDep(require_openrouter_key=False),
-    task_repo: TaskRepoDep,
+    task_query_service: TaskQueryServiceDep,
 ) -> TaskListResponse:
     """Get all tasks for the current user"""
-    tasks = task_repo.list_tasks_by_user(context.user_id)
+    tasks = task_query_service.list_tasks_by_user(context.user_id)
     return TaskListResponse(
         tasks=[task.to_response() for task in tasks],
     )
@@ -50,7 +50,7 @@ async def list_tasks(
 async def get_task(
     task_id: str,
     context: AuthContextDep(require_openrouter_key=False),
-    task_repo: TaskRepoDep,
+    task_query_service: TaskQueryServiceDep,
 ) -> TaskResponse:
     """
     Get a specific task by ID.
@@ -61,7 +61,7 @@ async def get_task(
     - Creation and completion times
     - Whether steps have been generated
     """
-    task = task_repo.get_task_by_id(task_id, context.user_id)
+    task = task_query_service.get_task_by_id(task_id, context.user_id)
     if task is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

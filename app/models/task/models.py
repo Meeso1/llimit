@@ -19,6 +19,14 @@ class Task:
     output: str | None
     attached_file_ids: list[str]
 
+    def with_cost(self, total_cost_usd: float) -> "TaskWithCost":
+        return TaskWithCost(**self.__dict__, total_cost_usd=total_cost_usd)
+
+
+@dataclass
+class TaskWithCost(Task):
+    total_cost_usd: float = 0.0
+
     def to_response(self) -> TaskResponse:
         return TaskResponse(
             id=self.id,
@@ -29,6 +37,7 @@ class Task:
             completed_at=self.completed_at,
             steps_generated=self.steps_generated,
             output=self.output,
+            total_cost_usd=self.total_cost_usd,
         )
 
 

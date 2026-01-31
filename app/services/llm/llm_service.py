@@ -2,6 +2,7 @@ from typing import AsyncGenerator
 from openai import AsyncOpenAI
 from fastapi import HTTPException
 import re
+import warnings
 
 from app.models.model.models import ModelDescription
 from app.services.llm.config.llm_config import LlmConfig
@@ -317,7 +318,22 @@ class OpenRouterLlmService(LlmService):
         reasoning_data = self._extract_reasoning_from_message(message)
         additional_data.update(reasoning_data)
         
-        response_message = LlmMessage.assistant(cleaned_content, additional_data)
+        # Extract token usage
+        # TODO: Check if usage data can be missing, and if not, throw instead of using a warning
+        if response.usage:
+            prompt_tokens = response.usage.prompt_tokens
+            completion_tokens = response.usage.completion_tokens
+        else:
+            warnings.warn("Usage data was not included in the response")
+            prompt_tokens = 0
+            completion_tokens = 0
+        
+        response_message = LlmMessage.assistant(
+            cleaned_content,
+            additional_data,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
         
         if logger:
             logger.log_response(model, response_message, config)

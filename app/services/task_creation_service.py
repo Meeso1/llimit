@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from app.db.file_repo import FileRepo
 from app.db.task_repo import TaskRepo
 from app.events.task_events import create_task_created_event
-from app.models.task.models import Task
+from app.models.task.models import TaskWithCost
 from app.models.task.requests import CreateTaskRequest
 from app.models.task.work_queue import WorkQueueItem
 from app.services.sse_service import SseService
@@ -41,7 +41,7 @@ class TaskCreationService:
         user_id: str,
         request: CreateTaskRequest,
         api_key: str,
-    ) -> Task:
+    ) -> TaskWithCost:
         self._validate_file_ids(user_id, request.file_ids)
         
         task = self.task_repo.create_task(
@@ -59,5 +59,4 @@ class TaskCreationService:
         
         await self.work_queue_service.enqueue(WorkQueueItem.make_task_decomposition_item(task, api_key))
         
-        return task
-    
+        return task.with_cost(0.0)

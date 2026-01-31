@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 
 from app.db.file_repo import FileRepo
 from app.db.task_repo import TaskRepo
+from app.db.task_cost_repo import TaskCostRepo
+from app.models.task.models import Task
 from app.services.file_service import FileService
 from app.services.llm.config.pdf_config import PdfConfig, PdfEngine
 from app.services.llm.llm_file import LlmFileBase
@@ -9,7 +11,7 @@ from app.services.llm_logging_service import LlmLoggingService
 from utils import not_none
 from app.events.task_events import create_task_step_completed_event, create_task_completed_event
 from app.models.task.enums import TaskStatus, StepStatus, StepType, ModelCapability
-from app.models.task.models import Task, TaskStep, NormalTaskStep, NormalTaskStepDefinition
+from app.models.task.models import TaskStep, NormalTaskStep
 from app.models.task.work_queue import WorkQueueItem
 from app.services.llm.config.llm_config import LlmConfig
 from app.services.llm.config.reasoning_config import ReasoningConfig
@@ -17,6 +19,7 @@ from app.services.llm.config.web_search_config import WebSearchConfig, SearchCon
 from app.services.llm.llm_service_base import LlmService, LlmMessage
 from app.services.sse_service import SseService
 from app.services.task_model_selection_service import TaskModelSelectionService
+from app.services.prompt_pricing_service import PromptPricingService
 from prompts.task_prompts import TASK_STEP_OUTPUT_DESCRIPTION, TASK_STEP_FAILURE_REASON_DESCRIPTION
 
 
@@ -36,6 +39,8 @@ class TaskStepExecutionService:
         sse_service: SseService,
         model_selection_service: TaskModelSelectionService,
         llm_logging_service: LlmLoggingService,
+        pricing_service: PromptPricingService,
+        cost_repo: TaskCostRepo,
     ) -> None:
         self.task_repo = task_repo
         self.file_repo = file_repo
@@ -44,6 +49,8 @@ class TaskStepExecutionService:
         self.sse_service = sse_service
         self.model_selection_service = model_selection_service
         self.llm_logging_service = llm_logging_service
+        self.pricing_service = pricing_service
+        self.cost_repo = cost_repo
     
     def _ensure_step_is_normal(self, step: TaskStep) -> NormalTaskStep:
         """Ensure the step is a normal step, raise error otherwise"""
@@ -168,9 +175,11 @@ class TaskStepExecutionService:
         config = self._build_llm_config(step)
         logger = self.llm_logging_service.create_for_task(task.id)
         
+        model_id = step.model_name or "google/gemini-2.5-flash-lite"
+        
         response = await self.llm_service.get_completion(
             api_key=api_key,
-            model=step.model_name or "google/gemini-2.5-flash-lite",
+            model=model_id,
             messages=messages,
             additional_requested_data={
                 "output": TASK_STEP_OUTPUT_DESCRIPTION,
@@ -180,6 +189,9 @@ class TaskStepExecutionService:
             config=config,
             logger=logger,
         )
+        
+        # Track cost for this LLM call
+        self.cost_repo.add_cost_increment(task.id, await self.pricing_service.calculate_cost(model_id, response, files))
         
         output = response.additional_data.get("output", "")
         failure_reason = response.additional_data.get("failure_reason", "").strip()
