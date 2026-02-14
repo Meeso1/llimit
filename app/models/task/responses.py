@@ -32,6 +32,8 @@ class TaskStepResponse(BaseModel):
     complexity: str | None = Field(None, description="Complexity level (not applicable for reevaluation steps)")
     required_capabilities: list[str] = Field(default_factory=list, description="Required capabilities (not applicable for reevaluation steps)")
     model_name: str | None = Field(None, description="The model selected for this step (not applicable for reevaluation steps)")
+    predicted_score: float | None = Field(None, description="Predicted quality score for the selected model (not applicable for reevaluation steps)")
+    predicted_length: float | None = Field(None, description="Predicted response length in tokens (not applicable for reevaluation steps)")
     response_content: str | None = Field(None, description="The LLM response for this step")
     output: str | None = Field(None, description="Concise output from the step")
     failure_reason: str | None = Field(None, description="Reason for step failure if the step could not be completed (only for normal steps)")

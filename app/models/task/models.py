@@ -66,6 +66,8 @@ class NormalTaskStep(TaskStep):
     required_capabilities: list[ModelCapability]
     required_file_ids: list[str]
     model_name: str | None
+    predicted_score: float | None
+    predicted_length: float | None
     output: str | None
     failure_reason: str | None
 
@@ -80,6 +82,8 @@ class NormalTaskStep(TaskStep):
             complexity=self.complexity,
             required_capabilities=self.required_capabilities,
             model_name=self.model_name,
+            predicted_score=self.predicted_score,
+            predicted_length=self.predicted_length,
             response_content=self.response_content,
             output=self.output,
             failure_reason=self.failure_reason,
@@ -115,6 +119,8 @@ class ReevaluateTaskStep(TaskStep):
             complexity=None,
             required_capabilities=[],
             model_name=None,
+            predicted_score=None,
+            predicted_length=None,
             response_content=self.response_content,
             output=None,
             failure_reason=None,

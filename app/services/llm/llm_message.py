@@ -13,6 +13,7 @@ class LlmMessage:
 
     prompt_tokens: int | None = None  # Only set for role="assistant"
     completion_tokens: int | None = None  # Only set for role="assistant"
+    # TODO: Track reasoning tokens
     
     @staticmethod
     def user(content: str, files: list[LlmFileBase] | None = None) -> "LlmMessage":

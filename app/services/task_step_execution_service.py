@@ -5,21 +5,19 @@ from app.db.task_repo import TaskRepo
 from app.db.task_cost_repo import TaskCostRepo
 from app.models.task.models import Task
 from app.services.file_service import FileService
-from app.services.llm.config.pdf_config import PdfConfig, PdfEngine
 from app.services.llm.llm_file import LlmFileBase
+from app.models.file.models import FileMetadata
 from app.services.llm_logging_service import LlmLoggingService
 from utils import not_none
 from app.events.task_events import create_task_step_completed_event, create_task_completed_event
-from app.models.task.enums import TaskStatus, StepStatus, StepType, ModelCapability
+from app.models.task.enums import TaskStatus, StepStatus, StepType
 from app.models.task.models import TaskStep, NormalTaskStep
 from app.models.task.work_queue import WorkQueueItem
-from app.services.llm.config.llm_config import LlmConfig
-from app.services.llm.config.reasoning_config import ReasoningConfig
-from app.services.llm.config.web_search_config import WebSearchConfig, SearchContextSize
 from app.services.llm.llm_service_base import LlmService, LlmMessage
 from app.services.sse_service import SseService
 from app.services.task_model_selection_service import TaskModelSelectionService
 from app.services.prompt_pricing_service import PromptPricingService
+from app.services import config_helpers
 from prompts.task_prompts import TASK_STEP_OUTPUT_DESCRIPTION, TASK_STEP_FAILURE_REASON_DESCRIPTION
 
 
@@ -67,9 +65,10 @@ class TaskStepExecutionService:
         
         return step
     
-    def _load_files_for_step(self, step: NormalTaskStep, user_id: str) -> list[LlmFileBase]:
-        """Load the files required for a step"""
+    def _load_files_for_step(self, step: NormalTaskStep, user_id: str) -> tuple[list[LlmFileBase], list[FileMetadata]]:
+        """Load the files required for a step and return both files and metadata"""
         files: list[LlmFileBase] = []
+        file_metadata_list: list[FileMetadata] = []
         
         for file_id in step.required_file_ids:
             file_metadata = self.file_repo.get_file_by_id_and_user(file_id, user_id)
@@ -79,51 +78,13 @@ class TaskStepExecutionService:
                 )
             
             files.append(self.file_service.convert_file_to_llm_file(file_metadata))
+            file_metadata_list.append(file_metadata)
         
-        return files
+        return files, file_metadata_list
 
-    def _build_web_search_config(self, step: NormalTaskStep) -> WebSearchConfig:
-        """Build web search configuration based on step's required capabilities"""
-        has_exa = ModelCapability.EXA_SEARCH in step.required_capabilities
-        has_native = ModelCapability.NATIVE_WEB_SEARCH in step.required_capabilities
-        
-        if not has_exa and not has_native:
-            return WebSearchConfig.default()
-        
-        return WebSearchConfig(
-            use_exa_search=has_exa,
-            use_native_search=has_native,
-            max_results=5,
-            search_context_size=SearchContextSize.MEDIUM,
-        )
-
-    def _build_reasoning_config(self, step: NormalTaskStep) -> ReasoningConfig:
-        """Build reasoning configuration based on step's required capabilities"""
-        has_reasoning = ModelCapability.REASONING in step.required_capabilities
-        
-        if not has_reasoning:
-            return ReasoningConfig.default()
-        
-        return ReasoningConfig.with_medium_effort()
-    
-    def _build_pdf_config(self, step: NormalTaskStep) -> PdfConfig:
-        """Build PDF configuration based on step's required capabilities"""
-        if ModelCapability.OCR_PDF in step.required_capabilities:
-            return PdfConfig(engine=PdfEngine.MISTRAL_OCR)
-        elif ModelCapability.TEXT_PDF in step.required_capabilities:
-            return PdfConfig(engine=PdfEngine.PDF_TEXT)
-        elif ModelCapability.NATIVE_PDF in step.required_capabilities:
-            return PdfConfig(engine=PdfEngine.NATIVE)
-        else:
-            return PdfConfig.default()
-
-    def _build_llm_config(self, step: NormalTaskStep) -> LlmConfig:
+    def _build_llm_config(self, step: NormalTaskStep):
         """Build LLM configuration based on step's required capabilities"""
-        return LlmConfig(
-            web_search=self._build_web_search_config(step),
-            reasoning=self._build_reasoning_config(step),
-            pdf=self._build_pdf_config(step),
-        )
+        return config_helpers.build_llm_config_for_capabilities(step.required_capabilities)
     
     async def execute_step(
         self,
@@ -143,11 +104,13 @@ class TaskStepExecutionService:
         
         if step.model_name is None:
             step_def = step.to_step_definition()
-            model_name = await self.model_selection_service.select_model_for_step(step_def)
+            evaluation = await self.model_selection_service.select_model_for_step(step_def)
             
             updated_step = not_none(self.task_repo.update_task_step(
                 step_id=step.id,
-                model_name=model_name,
+                model_name=evaluation.model_id,
+                predicted_score=evaluation.score,
+                predicted_length=evaluation.predicted_length,
             ), f"Step {step.id} after model selection")
             
             if not isinstance(updated_step, NormalTaskStep):
@@ -169,7 +132,7 @@ class TaskStepExecutionService:
         )
         
         # Load files required for this step
-        files = self._load_files_for_step(step, user_id)
+        files, file_metadata_list = self._load_files_for_step(step, user_id)
         
         messages = [LlmMessage.user(self._build_step_context(task, step, all_steps), files=files)]
         config = self._build_llm_config(step)
@@ -191,7 +154,10 @@ class TaskStepExecutionService:
         )
         
         # Track cost for this LLM call
-        self.cost_repo.add_cost_increment(task.id, await self.pricing_service.calculate_cost(model_id, response, files))
+        self.cost_repo.add_cost_increment(
+            task.id, 
+            await self.pricing_service.calculate_cost(model_id, response, file_metadata_list, config)
+        )
         
         output = response.additional_data.get("output", "")
         failure_reason = response.additional_data.get("failure_reason", "").strip()

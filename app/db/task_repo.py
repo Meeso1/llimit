@@ -46,6 +46,8 @@ def _create_task_steps_table() -> str:
             step_type TEXT NOT NULL DEFAULT 'normal',
             step_details TEXT NOT NULL,
             model_name TEXT,
+            predicted_score REAL,
+            predicted_length REAL,
             response_content TEXT,
             output TEXT,
             failure_reason TEXT,
@@ -215,7 +217,7 @@ class TaskRepo:
         
         query = """
             SELECT id, task_id, step_number, prompt, status, step_type, step_details,
-                   model_name, response_content, output, failure_reason, started_at, completed_at
+                   model_name, predicted_score, predicted_length, response_content, output, failure_reason, started_at, completed_at
             FROM task_steps
             WHERE task_id = ?
         """
@@ -237,6 +239,8 @@ class TaskRepo:
         step_id: str,
         status: StepStatus | None = None,
         model_name: str | None = None,
+        predicted_score: float | None = None,
+        predicted_length: float | None = None,
         response_content: str | None = None,
         output: str | None = None,
         failure_reason: str | None = None,
@@ -253,6 +257,14 @@ class TaskRepo:
         if model_name is not None:
             updates.append("model_name = ?")
             params.append(model_name)
+        
+        if predicted_score is not None:
+            updates.append("predicted_score = ?")
+            params.append(predicted_score)
+        
+        if predicted_length is not None:
+            updates.append("predicted_length = ?")
+            params.append(predicted_length)
         
         if response_content is not None:
             updates.append("response_content = ?")
@@ -277,7 +289,7 @@ class TaskRepo:
         if not updates:
             rows = self.db.execute_query(
                 """SELECT id, task_id, step_number, prompt, status, step_type, step_details,
-                          model_name, response_content, output, failure_reason, started_at, completed_at
+                          model_name, predicted_score, predicted_length, response_content, output, failure_reason, started_at, completed_at
                    FROM task_steps WHERE id = ?""",
                 (step_id,),
             )
@@ -292,7 +304,7 @@ class TaskRepo:
         
         rows = self.db.execute_query(
             """SELECT id, task_id, step_number, prompt, status, step_type, step_details,
-                      model_name, response_content, output, failure_reason, started_at, completed_at
+                      model_name, predicted_score, predicted_length, response_content, output, failure_reason, started_at, completed_at
                FROM task_steps WHERE id = ?""",
             (step_id,),
         )
@@ -317,7 +329,7 @@ class TaskRepo:
         rows = self.db.execute_query(
             """
             SELECT id, task_id, step_number, prompt, status, step_type, step_details,
-                   model_name, response_content, output, failure_reason, started_at, completed_at
+                   model_name, predicted_score, predicted_length, response_content, output, failure_reason, started_at, completed_at
             FROM task_steps
             WHERE id = ?
             """,
@@ -353,6 +365,8 @@ class TaskRepo:
                 required_capabilities=capabilities,
                 required_file_ids=step_details["required_file_ids"],
                 model_name=row["model_name"],
+                predicted_score=row["predicted_score"],
+                predicted_length=row["predicted_length"],
                 output=row["output"],
                 failure_reason=row["failure_reason"],
             )

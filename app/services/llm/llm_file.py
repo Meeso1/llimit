@@ -2,7 +2,8 @@
 from abc import ABC, abstractmethod
 import base64
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, get_args
+from app.models.file.models import AudioType, ImageType, VideoType
 from app.models.model.models import ModelDescription
 
 
@@ -68,7 +69,7 @@ class Image(LlmFileBase):
         }
         
     def validate(self, model_description: ModelDescription) -> str | None:
-        supproted_types = [f"image/{t}" for t in ["jpeg", "png", "gif", "webp"]]
+        supproted_types = [f"image/{t}" for t in get_args(ImageType)]
         
         errors = []
         if self.type not in supproted_types:
@@ -115,10 +116,8 @@ class Audio(LlmFileBase):
         }
         
     def validate(self, model_description: ModelDescription) -> str | None:
-        supported_types = ["wav", "mp3"]
-        
         errors = []
-        if self.type not in supported_types:
+        if self.type not in get_args(AudioType):
             errors.append(f"Unsupported audio type: {self.type}")
             
         if "audio" not in model_description.architecture.input_modalities:
@@ -142,7 +141,7 @@ class Video(LlmFileBase):
         }
         
     def validate(self, model_description: ModelDescription) -> str | None:
-        supported_types = [f"video/{t}" for t in ["mp4", "mov", "mpeg", "webm"]]
+        supported_types = [f"video/{t}" for t in get_args(VideoType)]
         
         errors = []
         if self.type not in supported_types:

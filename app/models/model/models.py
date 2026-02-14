@@ -22,6 +22,12 @@ class ModelPricing:
     exa_search: float | None = None  # Cost per 1000 Exa search results
     native_search: float | None = None  # Cost per 1000 native web search requests
 
+    # pdf-text is free, and produces text that is then included in the prompt
+    # native pdf processing is counted as input tokens too, at the same price
+    pdf_mistral_ocr: float = 0.0002 # Per 1000 pages
+
+    # Video pricing data isn't available through OpenRouter
+
     def to_response(self) -> ModelPricingResponse:
         return ModelPricingResponse(
             prompt_per_million=self.prompt_per_million,
