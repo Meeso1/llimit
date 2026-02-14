@@ -1,6 +1,6 @@
 from app.models.file.models import AudioType, FileMetadata, ImageType, VideoType
 from app.models.model.models import ModelPricing
-from app.services.llm.config.pdf_config import PdfConfig
+from app.services.llm.config.pdf_config import PdfConfig, PdfEngine
 from app.services.llm.config.web_search_config import SearchContextSize
 from app.services.llm.llm_message import LlmMessage
 from app.services.llm.config.llm_config import LlmConfig
@@ -195,9 +195,19 @@ class PromptPricingService:
         pdf_config: PdfConfig, 
         omit_token_costs: bool
     ) -> float:
-        # TODO: We need page count, text token count, and file token count for pricing
-        
-        return 0.0 
+        if pdf_config.engine == PdfEngine.MISTRAL_OCR:
+            page_count = metadata.additional_data.get("page_count", 0) # 0 - failed to analyze PDF
+            return (page_count / 1_000) * model_pricing.pdf_mistral_ocr
+
+        elif pdf_config.engine == PdfEngine.PDF_TEXT and not omit_token_costs:
+            text_token_count = metadata.additional_data.get("text_token_count", 0) # 0 - failed to analyze PDF
+            return (text_token_count / 1_000_000) * model_pricing.prompt_per_million
+
+        elif pdf_config.engine == PdfEngine.NATIVE and not omit_token_costs:
+            estimated_native_token_count = metadata.additional_data.get("estimated_native_token_count", 0) # 0 - failed to analyze PDF
+            return (estimated_native_token_count / 1_000_000) * model_pricing.prompt_per_million
+
+        return 0.0
 
     def _calculate_text_file_cost(
         self, 
@@ -208,13 +218,7 @@ class PromptPricingService:
         if omit_token_costs:
             return 0.0 # Text files are included in the prompt
 
-        if metadata.size_bytes is None:
-            raise ValueError("Text file metadata has no size - this shouldn't happen because text file URLs are not supported")
-        
-        bytes_per_character = 1.5 # Assuming UTF-8 encoding
-        characters = metadata.size_bytes / bytes_per_character
-        characters_per_token = 4
-        tokens = characters / characters_per_token
+        tokens = metadata.additional_data.get("token_count", 0) # 0 - failed to analyze text file
         return (tokens / 1_000_000) * model_pricing.prompt_per_million # Text files are just included in the prompt
 
     def _calculate_reasoning_cost(

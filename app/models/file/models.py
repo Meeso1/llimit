@@ -1,5 +1,5 @@
 from datetime import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal, get_args
 
 from app.models.file.responses import FileMetadataResponse
@@ -22,7 +22,7 @@ class FileMetadata:
     size_bytes: int | None = None
     storage_path: str | None = None
     url: str | None = None
-    additional_data: dict[str, Any] | None = None
+    additional_data: dict[str, Any] = field(default_factory=dict)
 
     def to_response(self) -> FileMetadataResponse:
         return FileMetadataResponse(
