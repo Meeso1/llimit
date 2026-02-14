@@ -21,11 +21,13 @@ from app.services.llm_logging_service import LlmLoggingService
 from app.services.model_cache_service import ModelCacheService
 from app.services.model_selection.model_selection_api_service import ModelScoringApiService
 from app.services.model_selection.dummy_model_scoring_service import DummyModelScoringService
+from app.services.pdf_analysis_service import PdfAnalysisService
 from app.services.sse_service import SseService
 from app.services.task_decomposition_service import TaskDecompositionService
 from app.services.task_model_selection_service import TaskModelSelectionService
 from app.services.task_creation_service import TaskCreationService
 from app.services.task_step_execution_service import TaskStepExecutionService
+from app.services.tokenization_service import TokenizationService
 from app.services.prompt_pricing_service import PromptPricingService
 from app.services.task_query_service import TaskQueryService
 from app.services.work_queue_service import WorkQueueService
@@ -39,6 +41,8 @@ _chat_repo_instance = ChatRepo(_database_instance)
 _file_repo_instance = FileRepo(_database_instance)
 _task_repo_instance = TaskRepo(_database_instance)
 _task_cost_repo_instance = TaskCostRepo(_database_instance)
+_tokenization_service_instance = TokenizationService()
+_pdf_analysis_service_instance = PdfAnalysisService(_tokenization_service_instance)
 _model_cache_service_instance = ModelCacheService()
 _prompt_pricing_service_instance = PromptPricingService(_model_cache_service_instance)
 _task_query_service_instance = TaskQueryService(_task_repo_instance, _task_cost_repo_instance)
