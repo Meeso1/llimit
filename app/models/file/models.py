@@ -1,6 +1,6 @@
 from datetime import datetime
 from dataclasses import dataclass
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 
 from app.models.file.responses import FileMetadataResponse
 
@@ -22,6 +22,7 @@ class FileMetadata:
     size_bytes: int | None = None
     storage_path: str | None = None
     url: str | None = None
+    additional_data: dict[str, Any] | None = None
 
     def to_response(self) -> FileMetadataResponse:
         return FileMetadataResponse(

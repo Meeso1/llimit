@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from app.db.file_repo import FileRepo
 from app.models.file.models import FileMetadata
+from app.services.file_metadata_processing_service import FileMetadataProcessingService
 from app.services.llm.llm_file import LlmFileBase, Pdf, PrfUrl, Image, ImageUrl, Audio, Video, VideoUrl, TextFile
 from app.settings import settings
 
@@ -22,8 +23,13 @@ SUPPORTED_VIDEO_TYPES = ["video/mp4", "video/mov", "video/mpeg", "video/webm"]
 class FileService:
     """Service for file upload and management"""
     
-    def __init__(self, file_repo: FileRepo) -> None:
+    def __init__(
+        self,
+        file_repo: FileRepo,
+        file_metadata_processing_service: FileMetadataProcessingService
+    ) -> None:
         self._file_repo = file_repo
+        self._file_metadata_processing_service = file_metadata_processing_service
         self._uploads_dir = settings.uploads_path
         os.makedirs(self._uploads_dir, exist_ok=True)
     
@@ -81,6 +87,11 @@ class FileService:
         with open(full_path, "w") as f:
             f.write(base64_content)
         
+        additional_data = self._file_metadata_processing_service.process_file(
+            content_type=content_type,
+            file_content=file_content
+        )
+        
         # Store metadata in database
         file_metadata = self._file_repo.create_file(
             file_id=file_id,
@@ -91,6 +102,7 @@ class FileService:
             created_at=now,
             size_bytes=len(file_content),
             storage_path=storage_path,
+            additional_data=additional_data,
         )
         
         return file_metadata
@@ -109,6 +121,10 @@ class FileService:
         file_id = str(uuid4())
         now = datetime.now(timezone.utc)
         
+        # TODO: Get additional_data from request for URL-based files
+        # For now, just use empty dict
+        additional_data = {}
+        
         # Store metadata in database
         file_metadata = self._file_repo.create_file(
             file_id=file_id,
@@ -118,6 +134,7 @@ class FileService:
             content_type=content_type,
             created_at=now,
             url=url,
+            additional_data=additional_data,
         )
         
         return file_metadata

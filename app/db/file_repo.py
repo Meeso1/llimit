@@ -1,4 +1,6 @@
+import json
 from datetime import datetime
+from typing import Any
 
 from app.db.database import Database, register_schema_sql
 from app.models.file.models import FileMetadata
@@ -16,6 +18,7 @@ def _create_files_table() -> str:
             size_bytes INTEGER,
             storage_path TEXT,
             url TEXT,
+            additional_data TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
@@ -47,13 +50,16 @@ class FileRepo:
         size_bytes: int | None = None,
         storage_path: str | None = None,
         url: str | None = None,
+        additional_data: dict[str, Any] | None = None,
     ) -> FileMetadata:
         """Create a new file metadata record"""
+        additional_data_json = json.dumps(additional_data if additional_data else {})
+        
         self.db.execute_update(
             """
             INSERT INTO files 
-            (id, user_id, filename, description, content_type, size_bytes, storage_path, url, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, user_id, filename, description, content_type, size_bytes, storage_path, url, additional_data, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 file_id,
@@ -64,6 +70,7 @@ class FileRepo:
                 size_bytes,
                 storage_path,
                 url,
+                additional_data_json,
                 created_at.isoformat(),
             ),
         )
@@ -77,6 +84,7 @@ class FileRepo:
             size_bytes=size_bytes,
             storage_path=storage_path,
             url=url,
+            additional_data=additional_data if additional_data else {},
             created_at=created_at,
         )
     
@@ -84,7 +92,7 @@ class FileRepo:
         """Get a file by ID for a specific user"""
         rows = self.db.execute_query(
             """
-            SELECT id, user_id, filename, description, content_type, size_bytes, storage_path, url, created_at
+            SELECT id, user_id, filename, description, content_type, size_bytes, storage_path, url, additional_data, created_at
             FROM files
             WHERE id = ? AND user_id = ?
             """,
@@ -100,7 +108,7 @@ class FileRepo:
         """Get a file by ID"""
         rows = self.db.execute_query(
             """
-            SELECT id, user_id, filename, description, content_type, size_bytes, storage_path, url, created_at
+            SELECT id, user_id, filename, description, content_type, size_bytes, storage_path, url, additional_data, created_at
             FROM files
             WHERE id = ?
             """,
@@ -116,7 +124,7 @@ class FileRepo:
         """List all files for a specific user"""
         rows = self.db.execute_query(
             """
-            SELECT id, user_id, filename, description, content_type, size_bytes, storage_path, url, created_at
+            SELECT id, user_id, filename, description, content_type, size_bytes, storage_path, url, additional_data, created_at
             FROM files
             WHERE user_id = ?
             ORDER BY created_at DESC
@@ -137,6 +145,7 @@ class FileRepo:
             size_bytes=row["size_bytes"],
             storage_path=row["storage_path"],
             url=row["url"],
+            additional_data=json.loads(row["additional_data"]),
             created_at=datetime.fromisoformat(row["created_at"]),
         )
 
