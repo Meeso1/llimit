@@ -1,6 +1,7 @@
 import base64
 import os
 from datetime import datetime, timezone
+from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -65,6 +66,7 @@ class FileService:
         description: str | None,
         content_type: str,
         file_content: bytes,
+        user_additional_data: dict[str, Any] | None = None,
     ) -> FileMetadata:
         """Upload a file and store its metadata"""
         self._validate_content_type(content_type)
@@ -87,10 +89,12 @@ class FileService:
         with open(full_path, "w") as f:
             f.write(base64_content)
         
-        additional_data = self._file_metadata_processing_service.process_file(
+        additional_data = dict(user_additional_data) if user_additional_data else {}
+        inferred_data = self._file_metadata_processing_service.process_file(
             content_type=content_type,
             file_content=file_content
         )
+        additional_data.update(inferred_data)
         
         # Store metadata in database
         file_metadata = self._file_repo.create_file(
@@ -114,6 +118,7 @@ class FileService:
         filename: str,
         description: str | None,
         content_type: str,
+        user_additional_data: dict[str, Any] | None = None,
     ) -> FileMetadata:
         """Register a file URL"""
         self._validate_content_type(content_type)
@@ -121,11 +126,8 @@ class FileService:
         file_id = str(uuid4())
         now = datetime.now(timezone.utc)
         
-        # TODO: Get additional_data from request for URL-based files
-        # For now, just use empty dict
-        additional_data = {}
+        additional_data = dict(user_additional_data) if user_additional_data else {}
         
-        # Store metadata in database
         file_metadata = self._file_repo.create_file(
             file_id=file_id,
             user_id=user_id,

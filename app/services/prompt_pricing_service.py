@@ -174,18 +174,10 @@ class PromptPricingService:
         if model_pricing.audio is None:
             return 0.0
 
-        if metadata.size_bytes is None:
-            raise ValueError("Audio file metadata has no size - this shouldn't happen because audio URLs are not supported")
-        
-        # TODO: Get actual audio length in file metadata
-        mb_per_minute = {
-            "wav": 10,
-            "mp3": 1.2,
-        }[audio_type]
-        estimated_length_minutes = metadata.size_bytes / (1024 * 1024) / mb_per_minute
+        length_seconds = metadata.additional_data.get("length_seconds", 60) # Default to 1 minute if user didn't provide length
 
-        estimated_tokens_per_minute = 75 * 60 # 75 tokens per second * 60 seconds per minute
-        estimated_audio_tokens = estimated_length_minutes * estimated_tokens_per_minute
+        estimated_tokens_per_second = 75
+        estimated_audio_tokens = length_seconds * estimated_tokens_per_second
         return (estimated_audio_tokens / 1_000_000) * model_pricing.audio
 
     def _calculate_pdf_cost(
