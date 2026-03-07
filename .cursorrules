@@ -16,6 +16,11 @@
 
 This section describes the main components of the project and the rules associated with them.
 
+- **`evaluation/`**: System evaluation tooling. Contains dataset loaders, API client wrappers, and evaluation runner scripts.
+    - **`evaluation/gaia/`**: GAIA benchmark integration — typed data models (`models.py`), dataset loader (`loader.py`), and answer scoring (`scoring.py`).
+    - **`evaluation/llimit_client/`**: Lightweight async HTTP client for the llimit task and file APIs.
+    - **`evaluation/evaluate.py`**: Main evaluation runner script. Run with `uv run python evaluation/evaluate.py --help`.
+    - **`evaluation/results/`**: JSON output files from evaluation runs (auto-created, git-ignored).
 - **`app/`**: The main application source code. All core logic, API definitions, and data models reside here.
 - **`prompts/`**: Contains prompt templates for interacting with Large Language Models.
     - **Description**: Files in this directory define string constants for LLM prompts.
