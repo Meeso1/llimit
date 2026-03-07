@@ -1,0 +1,6 @@
+{
+    "model_ids": [
+        "openai/gpt-4o",
+        "anthropic/claude-sonnet-4-5"
+    ]
+}

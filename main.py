@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from app.api.dependencies import get_database, get_user_repo, get_api_key_service, initialize_services, dispose_services
+from app.api.routes.allowed_models import router as allowed_models_router
 from app.api.routes.api_keys import router as api_keys_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.completions import router as completions_router
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
     )
     
     app.include_router(health_router)
+    app.include_router(allowed_models_router)
     app.include_router(chat_router)
     app.include_router(completions_router)
     app.include_router(files_router)

@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from app.request_context import RequestContext
+from app.db.allowed_models_repo import AllowedModelsRepo
 from app.db.api_key_repo import ApiKeyRepo
 from app.db.chat_repo import ChatRepo
 from app.db.database import Database
@@ -36,6 +37,7 @@ from app.settings import settings
 
 # Singleton instances
 _database_instance = Database()
+_allowed_models_repo_instance = AllowedModelsRepo(_database_instance)
 _user_repo_instance = UserRepo(_database_instance)
 _api_key_repo_instance = ApiKeyRepo(_database_instance)
 _chat_repo_instance = ChatRepo(_database_instance)
@@ -67,6 +69,7 @@ _dummy_model_scoring_service_instance = DummyModelScoringService()
 _task_model_selection_service_instance = TaskModelSelectionService(
     model_cache_service=_model_cache_service_instance,
     file_repo=_file_repo_instance,
+    allowed_models_repo=_allowed_models_repo_instance,
     model_scoring_service=_dummy_model_scoring_service_instance \
         if settings.use_dummy_model_scoring \
         else _model_scoring_api_service_instance,
@@ -115,6 +118,11 @@ _task_creation_service_instance = TaskCreationService(
 def get_database() -> Database:
     """Get the singleton Database instance"""
     return _database_instance
+
+
+def get_allowed_models_repo() -> AllowedModelsRepo:
+    """Get the singleton AllowedModelsRepo instance"""
+    return _allowed_models_repo_instance
 
 
 def get_user_repo() -> UserRepo:
@@ -237,6 +245,7 @@ def get_auth_context(require_openrouter_key: bool = True):
 
 
 # Type annotations for dependencies
+AllowedModelsRepoDep = Annotated[AllowedModelsRepo, Depends(get_allowed_models_repo)]
 ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
 FileRepoDep = Annotated[FileRepo, Depends(get_file_repo)]
 FileServiceDep = Annotated[FileService, Depends(get_file_service)]

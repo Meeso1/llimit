@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import math
 
+from app.db.allowed_models_repo import AllowedModelsRepo
 from app.db.file_repo import FileRepo
 from app.models.model.models import ModelDescription
 from app.models.task.enums import ModelCapability
@@ -22,17 +23,20 @@ class TaskModelSelectionService:
         self,
         model_cache_service: ModelCacheService,
         file_repo: FileRepo,
+        allowed_models_repo: AllowedModelsRepo,
         model_scoring_service: ModelScoringApiService,
         pricing_service: PromptPricingService,
     ) -> None:
         self.model_cache_service = model_cache_service
         self.file_repo = file_repo
+        self.allowed_models_repo = allowed_models_repo
         self.model_scoring_service = model_scoring_service
         self.pricing_service = pricing_service
     
     async def select_model_for_step(self, step: NormalTaskStepDefinition) -> ModelEvaluation:
         """Select the best model for a step based on score and cost."""
         models = await self.model_cache_service.get_all_models()
+        models = self._filter_by_allowlist(models)
         models = self._filter_by_input_modalities(step, models)
         for capability in step.required_capabilities:
             models = self._filter_by_capability(models, capability)
@@ -44,6 +48,14 @@ class TaskModelSelectionService:
         model_ids = [model.id for model in models]
         evaluations = await self._evaluate_models(model_ids, step)
         return self._select_best_model(evaluations)
+
+    def _filter_by_allowlist(self, models: list[ModelDescription]) -> list[ModelDescription]:
+        """Filter models to the allowed-models list; returns all models if the list is empty"""
+        allowed = self.allowed_models_repo.get_all()
+        if not allowed:
+            return models
+        allowed_set = set(allowed)
+        return [model for model in models if model.id in allowed_set]
 
     def _filter_by_input_modalities(self, step: NormalTaskStepDefinition, models: list[ModelDescription]) -> list[ModelDescription]:
         """Filter models by input modalities"""
