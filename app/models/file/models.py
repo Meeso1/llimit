@@ -5,6 +5,7 @@ from typing import Any, Literal, get_args
 from app.models.file.responses import FileMetadataResponse
 
 
+# TODO: Handle xlsx and docx - they are stored as text, but we need to match their mime type
 ImageType = Literal["jpeg", "png", "gif", "webp"]
 AudioType = Literal["wav", "mp3"]
 VideoType = Literal["mp4", "mov", "mpeg", "webm"]
