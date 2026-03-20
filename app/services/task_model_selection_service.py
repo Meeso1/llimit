@@ -141,19 +141,17 @@ class TaskModelSelectionService:
         if len(evaluations) == 1:
             return evaluations[0]
         
-        normalized_entries, median_cost, _ = self._normalize_scores_and_costs(evaluations)
+        normalized_entries = self._normalize_scores_and_costs(evaluations)
 
         best_model_id = normalized_entries[0].model_id
         best_utility = float('-inf')
         for normalized in normalized_entries:
-            # Filter out extremely expensive models (>3x median) and models with very poor scores (< mean - 2*std)
-            if normalized.estimated_cost > 3 * median_cost + 1e-4 or normalized.score < -2:
+            # Scores and costs are z-scores (mean 0, std 1). Skip very poor scores or cost outliers in the cohort.
+            if normalized.cost > 3 or normalized.score < -2:
                 continue
-            
-            # Calculate utility: score / sqrt(cost)
-            # Using sqrt makes cost less sensitive to extreme values
-            # Add small epsilon to avoid division by zero
-            utility = normalized.score / math.sqrt(normalized.cost + 0.01)
+
+            # Higher score z is better; lower cost z is better (cheap models have negative cost z).
+            utility = normalized.score - normalized.cost
             
             if utility > best_utility:
                 best_utility = utility
@@ -161,7 +159,7 @@ class TaskModelSelectionService:
 
         return next(iter(e for e in evaluations if e.model_id == best_model_id))
     
-    def _normalize_scores_and_costs(self, entries: list[ModelEvaluation]) -> tuple[list["_NormalizedEntry"], float, float]:
+    def _normalize_scores_and_costs(self, entries: list[ModelEvaluation]) -> list["_NormalizedEntry"]:
         """
         Normalize scores and costs to std=1 and mean=0.
 
@@ -173,9 +171,6 @@ class TaskModelSelectionService:
         mean_cost = sum(entry.estimated_cost for entry in entries) / len(entries)
         std_cost = math.sqrt(sum((entry.estimated_cost - mean_cost) ** 2 for entry in entries) / len(entries))
 
-        median_cost = sorted(entries, key=lambda e: e.estimated_cost)[len(entries) // 2].estimated_cost
-        median_score = sorted(entries, key=lambda e: e.score)[len(entries) // 2].score
-
         normalized_entries = [
             self._NormalizedEntry(
                 model_id=entry.model_id,
@@ -185,7 +180,7 @@ class TaskModelSelectionService:
             for entry in entries
         ]
 
-        return normalized_entries, median_cost, median_score
+        return normalized_entries
 
     @dataclass
     class _NormalizedEntry:

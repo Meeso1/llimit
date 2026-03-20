@@ -228,6 +228,11 @@ class TaskDecompositionService:
         logger = self.llm_logging_service.create_for_task(task.id)
         model_id = "google/gemini-2.5-pro"
         
+        config = LlmConfig(
+            reasoning=ReasoningConfig.with_medium_effort(),
+            web_search=WebSearchConfig.default(),
+            pdf=PdfConfig.default(),
+        )
         response = await self.llm_service.get_completion(
             api_key=api_key,
             model=model_id,
@@ -237,16 +242,12 @@ class TaskDecompositionService:
                 "steps": self._build_steps_description(),
             },
             temperature=0.7,
-            config=LlmConfig(
-                reasoning=ReasoningConfig.with_medium_effort(),
-                web_search=WebSearchConfig.default(),
-                pdf=PdfConfig.default(),
-            ),
+            config=config,
             logger=logger,
         )
         
         # Track cost for this LLM call
-        self.cost_repo.add_cost_increment(task.id, await self.pricing_service.calculate_cost(model_id, response, []))
+        self.cost_repo.add_cost_increment(task.id, await self.pricing_service.calculate_cost(model_id, response, [], config))
         
         return self._parse_response(response, task)
     
@@ -305,6 +306,11 @@ class TaskDecompositionService:
         logger = self.llm_logging_service.create_for_task(task.id)
         model_id = "google/gemini-2.5-pro"
         
+        config = LlmConfig(
+            reasoning=ReasoningConfig.with_medium_effort(),
+            web_search=WebSearchConfig.default(),
+            pdf=PdfConfig.default(),
+        )
         response = await self.llm_service.get_completion(
             api_key=api_key,
             model=model_id,
@@ -313,16 +319,12 @@ class TaskDecompositionService:
                 "steps": self._build_reevaluation_steps_description(),
             },
             temperature=0.7,
-            config=LlmConfig(
-                reasoning=ReasoningConfig.with_medium_effort(),
-                web_search=WebSearchConfig.default(),
-                pdf=PdfConfig.default(),
-            ),
+            config=config,
             logger=logger,
         )
         
         # Track cost for this LLM call
-        self.cost_repo.add_cost_increment(task.id, await self.pricing_service.calculate_cost(model_id, response, []))
+        self.cost_repo.add_cost_increment(task.id, await self.pricing_service.calculate_cost(model_id, response, [], config))
         
         return self._parse_reevaluation_response(response, task)
     
@@ -403,11 +405,17 @@ class TaskDecompositionService:
             if step.step_number == reevaluate_step.step_number:
                 failed_step = step
             else:
-                previous_steps_text += TASK_PREVIOUS_STEP_FORMAT.format(
-                    step_number=step.step_number + 1,
-                    step_prompt=step.prompt,
-                    step_output=step.output or "(no output)",
-                )
+                if isinstance(step, NormalTaskStep):
+                    previous_steps_text += TASK_PREVIOUS_STEP_FORMAT.format(
+                        step_number=step.step_number + 1,
+                        step_prompt=step.prompt,
+                        step_output=step.output or "(no output)",
+                    )
+                else:
+                    previous_steps_text += TASK_REEVALUATE_STEP_FORMAT.format(
+                        step_number=step.step_number + 1,
+                        step_prompt=step.prompt,
+                    )
         
         if failed_step is None or not isinstance(failed_step, NormalTaskStep):
             raise TaskDecompositionError(
