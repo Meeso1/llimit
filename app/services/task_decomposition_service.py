@@ -247,8 +247,12 @@ class TaskDecompositionService:
         )
         
         # Track cost for this LLM call
-        self.cost_repo.add_cost_increment(task.id, await self.pricing_service.calculate_cost(model_id, response, [], config))
-        
+        self.cost_repo.add_cost_increment(
+            task.id,
+            await self.pricing_service.calculate_cost(model_id, response, [], config),
+            not_none(response.response_cost_usd, "OR cost in LLM response"),
+        )
+
         return self._parse_response(response, task)
     
     def _parse_response(self, response: LlmMessage, task: Task) -> TaskDecompositionResult:
@@ -324,8 +328,12 @@ class TaskDecompositionService:
         )
         
         # Track cost for this LLM call
-        self.cost_repo.add_cost_increment(task.id, await self.pricing_service.calculate_cost(model_id, response, [], config))
-        
+        self.cost_repo.add_cost_increment(
+            task.id,
+            await self.pricing_service.calculate_cost(model_id, response, [], config),
+            not_none(response.response_cost_usd, "OR cost in LLM response"),
+        )
+
         return self._parse_reevaluation_response(response, task)
     
     def _build_abandoned_steps_context(self, abandoned_steps: list[TaskStep]) -> str:

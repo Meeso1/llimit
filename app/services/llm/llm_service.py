@@ -2,8 +2,6 @@ from typing import AsyncGenerator
 from openai import AsyncOpenAI
 from fastapi import HTTPException
 import re
-import warnings
-
 from app.models.model.models import ModelDescription
 from app.services.llm.config.llm_config import LlmConfig
 from app.services.llm.config.pdf_config import PdfConfig, PdfEngine
@@ -319,17 +317,19 @@ class OpenRouterLlmService(LlmService):
         additional_data.update(reasoning_data)
         
         # Extract token usage
-        # TODO: Check if usage data can be missing, and if not, throw instead of using a warning
-        if response.usage:
-            prompt_tokens = response.usage.prompt_tokens
-            completion_tokens = response.usage.completion_tokens
-        else:
-            warnings.warn("Usage data was not included in the response")
-            prompt_tokens = 0
-            completion_tokens = 0
-        
+        if not response.usage:
+            raise ValueError("Usage data was not included in the response")
+
+        prompt_tokens = response.usage.prompt_tokens
+        completion_tokens = response.usage.completion_tokens
+
+        or_cost_usd = getattr(response.usage, "cost", None)
+        if or_cost_usd is None:
+            raise ValueError("Cost data was not included in the response usage")
+
         response_message = LlmMessage.assistant(
             cleaned_content,
+            or_cost_usd,
             additional_data,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,

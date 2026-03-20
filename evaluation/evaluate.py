@@ -10,6 +10,8 @@ Usage example:
         [--limit 10] \\
         [--workers 5] \\
         [--task-timeout 600] \\
+        [--shuffle] \\
+        [--seed 42] \\
         [--output evaluation/results/run.json]
 """
 import argparse
@@ -17,6 +19,7 @@ import asyncio
 import dataclasses
 import json
 import os
+import random
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,9 +29,23 @@ from evaluation.gaia.models import GaiaConfig, GaiaSample, GaiaSplit
 from evaluation.gaia.scoring import extract_answer, is_correct
 from evaluation.llimit_client.client import LlimitClient, LlimitConfig, TaskResult
 
-_ANSWER_SUFFIX = (
-    "\n\nYour final answer must be a concise value (a number, name, short phrase, etc.). "
-    "At the very end of your response, write exactly:\nFinal Answer: [your answer]"
+SUPPORTED_FILE_EXTENSIONS: set[str] = {
+    ".pdf",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp",
+    ".mp3", ".wav", ".mpeg",
+    ".mp4", ".mov", ".webm",
+    ".txt", ".csv", ".xml", ".py", ".json", ".jsonld",
+    ".xlsx", ".docx",
+}
+
+
+TASK_PROMPT_TEMPLATE = (
+    "This is an evaluation question:\n\n"
+    "{question}\n\n"
+    "Your final answer must be a concise value (a number, name, short phrase, etc.).\n"
+    "At the very end of your response, write exactly:\n\n"
+    "Final Answer: [your answer]\n\n"
+    "Response format matters. It might be a good idea to plan a final 'check result' step, to make sure that produced response is in exactly the format that was requested"
 )
 
 
@@ -73,7 +90,7 @@ async def evaluate_sample(
             uploaded = await client.upload_file(local_path)
             file_ids.append(uploaded.file_id)
 
-        prompt = sample.question + _ANSWER_SUFFIX
+        prompt = TASK_PROMPT_TEMPLATE.format(question=sample.question)
         llimit_task_id = await client.create_task(prompt, file_ids)
         task_result = await client.wait_for_task(llimit_task_id, timeout=task_timeout)
 
@@ -101,7 +118,7 @@ async def evaluate_sample(
         correct=correct,
         task_status=task_result.status if task_result else "error",
         error=error,
-        cost_usd=task_result.total_cost_usd if task_result else 0.0,
+        cost_usd=task_result.total_or_cost_usd if task_result else 0.0,
         llimit_task_id=llimit_task_id,
         duration_seconds=round(duration, 2),
     )
@@ -160,7 +177,7 @@ def _print_result(
     error_note = f"  ERROR: {result.error}" if result.error else ""
     print(
         f"[{n:>3}/{total}] {status}  level={sample.level}"
-        f"  id={sample.task_id[:8]}..."
+        f"  id={sample.task_id}"
         f"  expected={sample.final_answer!r}"
         f"  got={result.predicted_answer!r}"
         f"  cost=${result.cost_usd:.4f}"
@@ -233,6 +250,8 @@ def save_results(
             "task_timeout": args.task_timeout,
             "workers": args.workers,
             "limit": args.limit,
+            "shuffle": args.shuffle,
+            "seed": args.seed if args.shuffle else None,
         },
         "summary": summary,
         "results": [dataclasses.asdict(r) for r in results],
@@ -302,6 +321,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Per-task timeout in seconds",
     )
     parser.add_argument(
+        "--shuffle",
+        action="store_true",
+        default=False,
+        help="Shuffle samples before evaluating (useful with --limit for random subsets)",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Random seed for shuffling (implies --shuffle; random if omitted)",
+    )
+    parser.add_argument(
         "--output",
         default=None,
         metavar="PATH",
@@ -316,6 +348,23 @@ def _build_parser() -> argparse.ArgumentParser:
 async def _async_main(args: argparse.Namespace) -> None:
     print(f"Loading GAIA dataset ({args.dataset_config}, {args.split})...")
     samples, data_dir = load_gaia(config=args.dataset_config, split=args.split)
+
+    before_filter = len(samples)
+    samples = [
+        s for s in samples
+        if s.file_name is None or Path(s.file_name).suffix.lower() in SUPPORTED_FILE_EXTENSIONS
+    ]
+    skipped = before_filter - len(samples)
+    if skipped:
+        print(f"Skipped {skipped} sample(s) with unsupported file types.")
+
+    if args.shuffle or args.seed is not None:
+        seed = args.seed if args.seed is not None else random.randrange(2**32)
+        print(f"Shuffling samples with seed={seed}")
+        rng = random.Random(seed)
+        rng.shuffle(samples)
+        args.shuffle = True
+        args.seed = seed
 
     if args.limit is not None:
         samples = samples[: args.limit]

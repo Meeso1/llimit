@@ -59,4 +59,4 @@ class TaskCreationService:
         
         await self.work_queue_service.enqueue(WorkQueueItem.make_task_decomposition_item(task, api_key))
         
-        return task.with_cost(0.0)
+        return task.with_cost(0.0, 0.0)

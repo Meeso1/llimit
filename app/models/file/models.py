@@ -51,7 +51,7 @@ class FileMetadata:
             return None
         
         image_type = self.content_type.split("/")[1]
-        if image_type in get_args(ImageType):
+        if image_type not in get_args(ImageType):
             raise ValueError(f"Unsupported image type: {image_type}")
 
         return image_type
@@ -61,7 +61,7 @@ class FileMetadata:
             return None
         
         audio_type = self.content_type.split("/")[1]
-        if audio_type in get_args(AudioType):
+        if audio_type not in get_args(AudioType):
             raise ValueError(f"Unsupported audio type: {audio_type}")
 
         return audio_type
@@ -74,7 +74,7 @@ class FileMetadata:
             return "url"
         
         video_type = self.content_type.split("/")[1]
-        if video_type in get_args(VideoType):
+        if video_type not in get_args(VideoType):
             raise ValueError(f"Unsupported video type: {video_type}")
 
         return video_type

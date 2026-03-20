@@ -1,12 +1,35 @@
 """Simple async client for interacting with the llimit task API."""
 import asyncio
-import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 
 from evaluation.llimit_client.models import TaskResult, UploadedFile
+
+
+_EXTENSION_CONTENT_TYPES: dict[str, str] = {
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".mpeg": "audio/mpeg",
+    ".mp4": "video/mp4",
+    ".mov": "video/mov",
+    ".webm": "video/webm",
+    ".txt": "text/plain",
+    ".csv": "text/csv",
+    ".xml": "text/xml",
+    ".py": "text/x-python",
+    ".json": "application/json",
+    ".jsonld": "application/json",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
 
 
 @dataclass
@@ -36,9 +59,9 @@ class LlimitClient:
     async def upload_file(self, file_path: str | Path) -> UploadedFile:
         """Upload a local file and return its metadata."""
         path = Path(file_path)
-        content_type, _ = mimetypes.guess_type(str(path))
-        if content_type is None:
-            content_type = "application/octet-stream"
+        content_type = _EXTENSION_CONTENT_TYPES.get(
+            path.suffix.lower(), "application/octet-stream"
+        )
 
         async with httpx.AsyncClient(timeout=self._config.request_timeout) as client:
             with path.open("rb") as fh:
@@ -101,7 +124,8 @@ class LlimitClient:
                     task_id=task_id,
                     status=status,
                     output=data.get("output"),
-                    total_cost_usd=data.get("total_cost_usd", 0.0),
+                    total_estimated_cost_usd=data.get("total_estimated_cost_usd", 0.0),
+                    total_or_cost_usd=data.get("total_or_cost_usd", 0.0),
                 )
 
             remaining = deadline - asyncio.get_event_loop().time()

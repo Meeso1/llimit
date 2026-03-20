@@ -9,7 +9,8 @@ class TaskResult:
     task_id: str
     status: str
     output: str | None
-    total_cost_usd: float
+    total_estimated_cost_usd: float
+    total_or_cost_usd: float
 
 
 @dataclass

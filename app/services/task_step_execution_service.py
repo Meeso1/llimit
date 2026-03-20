@@ -155,8 +155,9 @@ class TaskStepExecutionService:
         
         # Track cost for this LLM call
         self.cost_repo.add_cost_increment(
-            task.id, 
-            await self.pricing_service.calculate_cost(model_id, response, file_metadata_list, config)
+            task.id,
+            await self.pricing_service.calculate_cost(model_id, response, file_metadata_list, config),
+            not_none(response.response_cost_usd, "OR cost in LLM response"),
         )
         
         output = response.additional_data.get("output", "")
