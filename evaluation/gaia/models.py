@@ -2,6 +2,8 @@
 from dataclasses import dataclass
 from typing import Literal
 
+from evaluation.gaia.tools import GaiaTool
+
 
 GaiaLevel = Literal["1", "2", "3"]
 GaiaConfig = Literal["2023_level1", "2023_level2", "2023_level3"]
@@ -15,7 +17,7 @@ class GaiaAnnotatorMetadata:
     steps: str
     number_of_steps: int
     time_taken: str
-    tools: str
+    tools: list[GaiaTool]
     number_of_tools: int
 
 

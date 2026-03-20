@@ -26,8 +26,19 @@ from pathlib import Path
 
 from evaluation.gaia.loader import load_gaia
 from evaluation.gaia.models import GaiaConfig, GaiaSample, GaiaSplit
+from evaluation.gaia.tools import GaiaTool
 from evaluation.gaia.scoring import extract_answer, is_correct
-from evaluation.llimit_client.client import LlimitClient, LlimitConfig, TaskResult
+from evaluation.llimit_client.client import LlimitClient, LlimitConfig
+from evaluation.llimit_client.dtos import TaskResult
+
+_UNSUPPORTED_TOOLS: set[GaiaTool] = {
+    "youtube",
+    "web_file_download",
+    "python",
+    "powerpoint_viewer",
+    "google_maps",
+    
+}
 
 SUPPORTED_FILE_EXTENSIONS: set[str] = {
     ".pdf",
@@ -37,6 +48,16 @@ SUPPORTED_FILE_EXTENSIONS: set[str] = {
     ".txt", ".csv", ".xml", ".py", ".json", ".jsonld",
     ".xlsx", ".docx",
 }
+
+
+def _is_supported(sample: GaiaSample) -> bool:
+    """Return True if the sample can be attempted given the system's capabilities."""
+    if sample.file_name is not None:
+        if Path(sample.file_name).suffix.lower() not in SUPPORTED_FILE_EXTENSIONS:
+            return False
+    if _UNSUPPORTED_TOOLS.intersection(sample.annotator_metadata.tools):
+        return False
+    return True
 
 
 TASK_PROMPT_TEMPLATE = (
@@ -88,10 +109,10 @@ async def evaluate_sample(
         if sample.file_path:
             local_path = Path(data_dir) / sample.file_path
             uploaded = await client.upload_file(local_path)
-            file_ids.append(uploaded.file_id)
+            file_ids.append(uploaded.id)
 
         prompt = TASK_PROMPT_TEMPLATE.format(question=sample.question)
-        llimit_task_id = await client.create_task(prompt, file_ids)
+        llimit_task_id = (await client.create_task(prompt, file_ids)).id
         task_result = await client.wait_for_task(llimit_task_id, timeout=task_timeout)
 
     except Exception as exc:
@@ -350,13 +371,10 @@ async def _async_main(args: argparse.Namespace) -> None:
     samples, data_dir = load_gaia(config=args.dataset_config, split=args.split)
 
     before_filter = len(samples)
-    samples = [
-        s for s in samples
-        if s.file_name is None or Path(s.file_name).suffix.lower() in SUPPORTED_FILE_EXTENSIONS
-    ]
+    samples = [s for s in samples if _is_supported(s)]
     skipped = before_filter - len(samples)
     if skipped:
-        print(f"Skipped {skipped} sample(s) with unsupported file types.")
+        print(f"Skipped {skipped} sample(s) with unsupported requirements.")
 
     if args.shuffle or args.seed is not None:
         seed = args.seed if args.seed is not None else random.randrange(2**32)
@@ -377,16 +395,15 @@ async def _async_main(args: argparse.Namespace) -> None:
         or f"evaluation/results/gaia_{args.dataset_config}_{args.split}_{timestamp}.json"
     )
 
-    config = LlimitConfig(
+    config = LlimitConfig.from_env(
         base_url=args.base_url,
         api_key=args.api_key,
         openrouter_api_key=args.openrouter_api_key,
     )
-    client = LlimitClient(config)
-
-    results = await run_evaluation(
-        samples, data_dir, client, args.task_timeout, args.workers, args, output_path
-    )
+    async with LlimitClient(config) as client:
+        results = await run_evaluation(
+            samples, data_dir, client, args.task_timeout, args.workers, args, output_path
+        )
     _print_and_save(results, args, output_path)
 
 

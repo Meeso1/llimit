@@ -3,6 +3,7 @@ from datasets import load_dataset
 from huggingface_hub import snapshot_download
 
 from evaluation.gaia.models import GaiaAnnotatorMetadata, GaiaConfig, GaiaSample, GaiaSplit
+from evaluation.gaia.tools import GAIA_TASK_TOOL_OVERRIDES, parse_tools
 
 
 def load_gaia(
@@ -26,8 +27,14 @@ def _convert_sample(raw: dict) -> GaiaSample:
         except ValueError:
             return 0
 
+    task_id: str = raw["task_id"]
+    tools = (
+        GAIA_TASK_TOOL_OVERRIDES[task_id]
+        if task_id in GAIA_TASK_TOOL_OVERRIDES
+        else parse_tools(meta.get("Tools", ""))
+    )
     return GaiaSample(
-        task_id=raw["task_id"],
+        task_id=task_id,
         question=raw["Question"],
         level=raw["Level"],
         final_answer=raw["Final answer"],
@@ -37,7 +44,7 @@ def _convert_sample(raw: dict) -> GaiaSample:
             steps=meta.get("Steps", ""),
             number_of_steps=_int(meta.get("Number of steps")),
             time_taken=meta.get("How long did this take?", ""),
-            tools=meta.get("Tools", ""),
+            tools=tools,
             number_of_tools=_int(meta.get("Number of tools")),
         ),
     )
