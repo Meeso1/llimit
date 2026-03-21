@@ -23,6 +23,7 @@ from app.services.model_cache_service import ModelCacheService
 from app.services.model_selection.model_selection_api_service import ModelScoringApiService
 from app.services.model_selection.dummy_model_scoring_service import DummyModelScoringService
 from app.services.file_metadata_processing_service import FileMetadataProcessingService
+from app.services.office_conversion_service import OfficeConversionService
 from app.services.pdf_analysis_service import PdfAnalysisService
 from app.services.sse_service import SseService
 from app.services.task_decomposition_service import TaskDecompositionService
@@ -46,9 +47,11 @@ _task_repo_instance = TaskRepo(_database_instance)
 _task_cost_repo_instance = TaskCostRepo(_database_instance)
 _tokenization_service_instance = TokenizationService()
 _pdf_analysis_service_instance = PdfAnalysisService(_tokenization_service_instance)
+_office_conversion_service_instance = OfficeConversionService()
 _file_metadata_processing_service_instance = FileMetadataProcessingService(
     _pdf_analysis_service_instance,
-    _tokenization_service_instance
+    _tokenization_service_instance,
+    _office_conversion_service_instance,
 )
 _model_cache_service_instance = ModelCacheService()
 _prompt_pricing_service_instance = PromptPricingService(_model_cache_service_instance)
@@ -64,7 +67,11 @@ _model_scoring_api_service_instance = ModelScoringApiService(
     length_prediction_model=settings.model_selection_api_length_prediction_model,
     batch_size=settings.model_selection_api_batch_size,
 )
-_file_service_instance = FileService(_file_repo_instance, _file_metadata_processing_service_instance)
+_file_service_instance = FileService(
+    _file_repo_instance,
+    _file_metadata_processing_service_instance,
+    _office_conversion_service_instance,
+)
 _dummy_model_scoring_service_instance = DummyModelScoringService()
 _task_model_selection_service_instance = TaskModelSelectionService(
     model_cache_service=_model_cache_service_instance,

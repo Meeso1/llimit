@@ -141,6 +141,10 @@ class PromptPricingService:
                 cost += self._calculate_pdf_cost(file_metadata, model_pricing, config.pdf, omit_token_costs)
             elif file_metadata.is_text_file():
                 cost += self._calculate_text_file_cost(file_metadata, model_pricing, omit_token_costs)
+            elif file_metadata.is_json_file():
+                cost += self._calculate_text_file_cost(file_metadata, model_pricing, omit_token_costs)
+            elif file_metadata.is_office_file():
+                cost += self._calculate_text_file_cost(file_metadata, model_pricing, omit_token_costs)
             elif (image_type := file_metadata.get_image_type()) is not None:
                 cost += self._calculate_image_cost(image_type, file_metadata, model_pricing)
             elif (video_type := file_metadata.get_video_type()) is not None:

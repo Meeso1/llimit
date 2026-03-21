@@ -1,5 +1,6 @@
 from typing import Any
 
+from app.services.office_conversion_service import OfficeConversionService, XLSX_CONTENT_TYPE, DOCX_CONTENT_TYPE
 from app.services.pdf_analysis_service import PdfAnalysisService
 from app.services.tokenization_service import TokenizationService
 
@@ -10,31 +11,28 @@ class FileMetadataProcessingService:
     def __init__(
         self,
         pdf_analysis_service: PdfAnalysisService,
-        tokenization_service: TokenizationService
+        tokenization_service: TokenizationService,
+        office_conversion_service: OfficeConversionService,
     ) -> None:
         self._pdf_analysis_service = pdf_analysis_service
         self._tokenization_service = tokenization_service
+        self._office_conversion_service = office_conversion_service
 
     def process_file(
         self,
         content_type: str,
         file_content: bytes,
     ) -> dict[str, Any]:
-        """
-        Process a file and extract additional metadata.
-        
-        Args:
-            content_type: MIME type of the file
-            file_content: Raw file bytes
-            
-        Returns:
-            Dictionary with additional metadata specific to the file type
-        """
+        """Process a file and extract additional metadata."""
         if content_type == "application/pdf":
             return self._process_pdf(file_content)
-        elif content_type.startswith("text/"):
+        elif content_type.startswith("text/") or content_type == "application/json":
             return self._process_text(file_content)
-        
+        elif content_type in (XLSX_CONTENT_TYPE, DOCX_CONTENT_TYPE):
+            text = self._office_conversion_service.extract_text(content_type, file_content)
+            token_count = self._tokenization_service.count_tokens(text)
+            return {"token_count": token_count}
+
         return {}
 
     def _process_pdf(self, pdf_bytes: bytes) -> dict[str, Any]:

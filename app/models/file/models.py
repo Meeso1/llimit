@@ -3,9 +3,9 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, get_args
 
 from app.models.file.responses import FileMetadataResponse
+from app.services.office_conversion_service import XLSX_CONTENT_TYPE, DOCX_CONTENT_TYPE
 
 
-# TODO: Handle xlsx and docx - they are stored as text, but we need to match their mime type
 ImageType = Literal["jpeg", "png", "gif", "webp"]
 AudioType = Literal["wav", "mp3"]
 VideoType = Literal["mp4", "mov", "mpeg", "webm"]
@@ -82,6 +82,12 @@ class FileMetadata:
 
     def is_text_file(self) -> bool:
         return self.content_type.startswith("text/")
+
+    def is_json_file(self) -> bool:
+        return self.content_type == "application/json"
+
+    def is_office_file(self) -> bool:
+        return self.content_type in (XLSX_CONTENT_TYPE, DOCX_CONTENT_TYPE)
 
     def is_pdf(self) -> bool:
         return self.content_type == "application/pdf"

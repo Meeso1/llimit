@@ -1,18 +1,16 @@
 import base64
-import io
 import os
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-import docx
-import openpyxl
 from fastapi import HTTPException
 
 from app.db.file_repo import FileRepo
 from app.models.file.models import FileMetadata
 from app.services.file_metadata_processing_service import FileMetadataProcessingService
 from app.services.llm.llm_file import LlmFileBase, Pdf, PrfUrl, Image, ImageUrl, Audio, Video, VideoUrl, TextFile
+from app.services.office_conversion_service import OfficeConversionService, XLSX_CONTENT_TYPE, DOCX_CONTENT_TYPE
 from app.settings import settings
 
 
@@ -21,10 +19,7 @@ SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
 SUPPORTED_PDF_TYPES = ["application/pdf"]
 SUPPORTED_AUDIO_TYPES = ["audio/wav", "audio/mp3", "audio/mpeg"]
 SUPPORTED_VIDEO_TYPES = ["video/mp4", "video/mov", "video/mpeg", "video/webm"]
-SUPPORTED_OFFICE_TYPES = [
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-]
+SUPPORTED_OFFICE_TYPES = [XLSX_CONTENT_TYPE, DOCX_CONTENT_TYPE]
 # Text types support any text/* content type, plus application/json
 
 
@@ -34,10 +29,12 @@ class FileService:
     def __init__(
         self,
         file_repo: FileRepo,
-        file_metadata_processing_service: FileMetadataProcessingService
+        file_metadata_processing_service: FileMetadataProcessingService,
+        office_conversion_service: OfficeConversionService,
     ) -> None:
         self._file_repo = file_repo
         self._file_metadata_processing_service = file_metadata_processing_service
+        self._office_conversion_service = office_conversion_service
         self._uploads_dir = settings.uploads_path
         os.makedirs(self._uploads_dir, exist_ok=True)
     
@@ -193,36 +190,6 @@ class FileService:
         # For audio and text, we need the actual content
         raise Exception(f"Unsupported content type: {content_type}")
     
-    def _xlsx_to_text(self, content: bytes) -> str:
-        """Convert xlsx binary content to a plain-text representation of all sheets."""
-        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
-        parts: list[str] = []
-        for sheet_name in wb.sheetnames:
-            ws = wb[sheet_name]
-            rows = [
-                "\t".join("" if cell.value is None else str(cell.value) for cell in row)
-                for row in ws.iter_rows()
-            ]
-            parts.append(f"=== Sheet: {sheet_name} ===\n" + "\n".join(rows))
-        return "\n\n".join(parts)
-
-    def _docx_to_text(self, content: bytes) -> str:
-        """Convert docx binary content to plain text, preserving paragraphs and tables."""
-        document = docx.Document(io.BytesIO(content))
-        parts: list[str] = []
-        for block in document.element.body:
-            tag = block.tag.split("}")[-1]
-            if tag == "p":
-                text = "".join(node.text or "" for node in block.iter() if node.text)
-                if text.strip():
-                    parts.append(text)
-            elif tag == "tbl":
-                table = next((t for t in document.tables if t._tbl is block), None)
-                if table:
-                    for row in table.rows:
-                        parts.append("\t".join(cell.text for cell in row.cells))
-        return "\n".join(parts)
-
     def _convert_local_file_to_llm_file(self, file_metadata: FileMetadata) -> LlmFileBase:
         """Convert a local/uploaded file to an LlmFileBase object"""
         content = self.read_file_content(file_metadata)
@@ -252,17 +219,11 @@ class FileService:
                 content_type=content_type,
                 content=text_content,
             )
-        elif content_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+        elif content_type in SUPPORTED_OFFICE_TYPES:
             return TextFile(
                 filename=file_metadata.filename,
-                content_type="text/plain",
-                content=self._xlsx_to_text(content),
-            )
-        elif content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            return TextFile(
-                filename=file_metadata.filename,
-                content_type="text/plain",
-                content=self._docx_to_text(content),
+                content_type=content_type,
+                content=self._office_conversion_service.extract_text(content_type, content),
             )
 
         raise Exception(f"Unsupported content type: {content_type}")
