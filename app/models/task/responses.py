@@ -1,7 +1,7 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
 
-from app.models.task.enums import TaskStatus, StepStatus, StepType
+from app.models.task.enums import TaskStatus, StepStatus, StepType, WorkItemType
 
 
 class TaskResponse(BaseModel):
@@ -47,4 +47,25 @@ class TaskStepResponse(BaseModel):
 class TaskStepListResponse(BaseModel):
     task_id: str
     steps: list[TaskStepResponse]
+
+
+class WorkQueueItemInfo(BaseModel):
+    task_id: str
+    step_id: str | None
+    step_number: int | None
+    item_type: WorkItemType
+    enqueue_time: datetime | None
+    start_time: datetime | None
+
+
+class StoppedTaskInfo(BaseModel):
+    task_id: str
+    title: str | None
+    status: TaskStatus
+
+
+class WorkQueueStateResponse(BaseModel):
+    currently_processing: WorkQueueItemInfo | None
+    pending: list[WorkQueueItemInfo]
+    stopped_tasks: list[StoppedTaskInfo]
 

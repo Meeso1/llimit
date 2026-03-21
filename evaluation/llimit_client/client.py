@@ -18,6 +18,7 @@ from evaluation.llimit_client.dtos import (
     TaskList,
     TaskResult,
     TaskStepList,
+    WorkQueueState,
 )
 
 
@@ -278,6 +279,12 @@ class LlimitClient:
         self._raise_for_status(response)
         return TaskStepList.from_json(response.json())
 
+    async def get_work_queue_state(self) -> WorkQueueState:
+        """Fetch the current state of the work queue."""
+        response = await self.request("GET", "/task/queue")
+        self._raise_for_status(response)
+        return WorkQueueState.from_json(response.json())
+
     async def wait_for_task(
         self,
         task_id: str,
@@ -287,7 +294,7 @@ class LlimitClient:
         backoff_factor: float = 1.5,
     ) -> TaskResult:
         """Poll a task until it reaches a terminal state or the timeout expires."""
-        _TERMINAL = frozenset({"completed", "failed"})
+        _TERMINAL = frozenset({"completed", "failed", "stopped"})
 
         interval = initial_interval
         deadline = asyncio.get_event_loop().time() + timeout
@@ -325,7 +332,8 @@ class LlimitClient:
                     params.append((key, v))
 
         req = self._client.build_request("GET", "sse/events", params=params or None)
-        response = await self._client.send(req, stream=True)
+        sse_timeout = httpx.Timeout(timeout=self._config.request_timeout, read=None)
+        response = await self._client.send(req, stream=True, timeout=sse_timeout)
         try:
             if response.status_code >= 400:
                 body = await response.aread()

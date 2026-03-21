@@ -214,8 +214,8 @@ class TaskStepExecutionService:
             prompt=failure_reason,
             is_planned=False,
         )
-        
-        return [WorkQueueItem.make_task_reevaluation_item(task, reevaluation_step.id, api_key)]
+
+        return [WorkQueueItem.make_task_reevaluation_item(task, reevaluation_step.id, reevaluation_step.step_number, api_key)]
     
     def _build_step_context(self, task: Task, step: TaskStep, all_steps: list[TaskStep]) -> str:
         """Build context for step execution from task and previous steps"""
@@ -248,9 +248,9 @@ class TaskStepExecutionService:
             next_step = next_steps[0]
             # Queue different work item types based on step type
             if next_step.step_type == StepType.REEVALUATE:
-                return [WorkQueueItem.make_task_reevaluation_item(task, next_step.id, api_key)], False
+                return [WorkQueueItem.make_task_reevaluation_item(task, next_step.id, next_step.step_number, api_key)], False
             else:
-                return [WorkQueueItem.make_task_step_execution_item(task, next_step.id, api_key)], False
+                return [WorkQueueItem.make_task_step_execution_item(task, next_step.id, next_step.step_number, api_key)], False
         else:
             is_done = all(s.status == StepStatus.COMPLETED for s in all_steps)
             return [], is_done

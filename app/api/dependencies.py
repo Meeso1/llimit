@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -260,14 +261,24 @@ CompletionStreamServiceDep = Annotated[CompletionStreamService, Depends(get_comp
 TaskCreationServiceDep = Annotated[TaskCreationService, Depends(get_task_creation_service)]
 TaskRepoDep = Annotated[TaskRepo, Depends(get_task_repo)]
 TaskQueryServiceDep = Annotated[TaskQueryService, Depends(get_task_query_service)]
+WorkQueueServiceDep = Annotated[WorkQueueService, Depends(get_work_queue_service)]
 LLMServiceDep = Annotated[LlmService, Depends(get_llm_service)]
 ModelCacheServiceDep = Annotated[ModelCacheService, Depends(get_model_cache_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 SseServiceDep = Annotated[SseService, Depends(get_sse_service)]
 
 
+_logger = logging.getLogger(__name__)
+
+
 # Register stuff that needs to happen when app starts here
-async def initialize_services():
+async def initialize_services() -> None:
+    stopped_count = _task_repo_instance.stop_active_tasks()
+    if stopped_count > 0:
+        _logger.warning(
+            "Marked %d task(s) as STOPPED on startup (were left in an active state from a previous run)",
+            stopped_count,
+        )
     _work_queue_service_instance.start_processing()
 
 

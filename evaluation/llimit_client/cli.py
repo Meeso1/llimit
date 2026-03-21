@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 
 from evaluation.llimit_client.client import LlimitApiError, LlimitClient, LlimitConfig
-from evaluation.llimit_client.dtos import FileList, FileMetadata, Task, TaskList, TaskStepList
+from evaluation.llimit_client.dtos import FileList, FileMetadata, Task, TaskList, TaskStepList, WorkQueueState
 
 
 def _jsonable(obj: Any) -> Any:
@@ -130,6 +130,28 @@ def _print_steps_pretty(sl: TaskStepList) -> None:
             print(f"  failure: {s.failure_reason}")
 
 
+def _print_queue_state_pretty(state: WorkQueueState) -> None:
+    if state.currently_processing:
+        item = state.currently_processing
+        started = item.start_time.isoformat() if item.start_time else "?"
+        print(f"processing:  [{item.item_type}]  task={item.task_id}  step_number={item.step_number}  started={started}")
+    else:
+        print("processing:  (none)")
+
+    print(f"pending ({len(state.pending)}):")
+    for item in state.pending:
+        queued = item.enqueue_time.isoformat() if item.enqueue_time else "?"
+        print(f"  [{item.item_type}]  task={item.task_id}  step_number={item.step_number}  queued={queued}")
+
+    if state.stopped_tasks:
+        print(f"stopped tasks ({len(state.stopped_tasks)}):")
+        for t in state.stopped_tasks:
+            title = (t.title or "").replace("\n", " ")[:60]
+            print(f"  {t.task_id}  {t.status:12}  {title}")
+    else:
+        print("stopped tasks: (none)")
+
+
 def _print_file_pretty(f: FileMetadata) -> None:
     print(f"id:           {f.id}")
     print(f"filename:     {f.filename}")
@@ -211,6 +233,17 @@ async def cmd_task_steps(args: argparse.Namespace) -> int:
         print(len(sl.steps))
     else:
         _print_steps_pretty(sl)
+    return 0
+
+
+async def cmd_task_queue(args: argparse.Namespace) -> int:
+    async with LlimitClient(_config_from_args(args)) as client:
+        state = await client.get_work_queue_state()
+
+    if args.format == "json":
+        _print_json(state, indent=2 if args.json_indent else None)
+    else:
+        _print_queue_state_pretty(state)
     return 0
 
 
@@ -364,6 +397,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_tg.add_argument("--json-indent", action="store_true")
     p_tg.set_defaults(_run=cmd_task_get)
+
+    # task queue
+    p_tq = sub.add_parser("task-queue", help="GET /task/queue — work queue state and stopped tasks")
+    _add_client_args(p_tq)
+    p_tq.add_argument(
+        "--format",
+        choices=("pretty", "json"),
+        default="pretty",
+    )
+    p_tq.add_argument("--json-indent", action="store_true")
+    p_tq.set_defaults(_run=cmd_task_queue)
 
     # task steps
     p_ts = sub.add_parser("task-steps", help="GET /task/{id}/steps")

@@ -375,6 +375,29 @@ class TaskRepo:
         else:
             raise ValueError(f"Unknown step type: {step_type}")
     
+    def list_tasks_by_statuses(self, statuses: list[TaskStatus]) -> list[Task]:
+        """List tasks across all users matching any of the given statuses"""
+        if not statuses:
+            return []
+        placeholders = ",".join("?" * len(statuses))
+        rows = self.db.execute_query(
+            f"""
+            SELECT id, user_id, prompt, title, status, created_at, completed_at, steps_generated, output, attached_file_ids
+            FROM tasks
+            WHERE status IN ({placeholders})
+            ORDER BY created_at DESC
+            """,
+            tuple(s.value for s in statuses),
+        )
+        return [self._row_to_task(row) for row in rows]
+
+    def stop_active_tasks(self) -> int:
+        """Set all DECOMPOSING and IN_PROGRESS tasks to STOPPED, returns count of affected rows"""
+        return self.db.execute_update(
+            "UPDATE tasks SET status = ? WHERE status IN (?, ?)",
+            (TaskStatus.STOPPED.value, TaskStatus.DECOMPOSING.value, TaskStatus.IN_PROGRESS.value),
+        )
+
     def mark_steps_as_abandoned_after(self, task_id: str, after_step_number: int) -> None:
         """Mark all steps after a given step number as abandoned"""
         self.db.execute_update(

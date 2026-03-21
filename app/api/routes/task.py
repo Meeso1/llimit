@@ -1,11 +1,12 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.api.dependencies import AuthContextDep, TaskCreationServiceDep, TaskRepoDep, TaskQueryServiceDep
+from app.api.dependencies import AuthContextDep, TaskCreationServiceDep, TaskRepoDep, TaskQueryServiceDep, WorkQueueServiceDep
 from app.models.task.requests import CreateTaskRequest
 from app.models.task.responses import (
     TaskResponse,
     TaskListResponse,
     TaskStepListResponse,
+    WorkQueueStateResponse,
 )
 
 router = APIRouter(
@@ -43,6 +44,29 @@ async def list_tasks(
     tasks = task_query_service.list_tasks_by_user(context.user_id)
     return TaskListResponse(
         tasks=[task.to_response() for task in tasks],
+    )
+
+
+@router.get("/queue", response_model=WorkQueueStateResponse)
+async def get_work_queue_state(
+    context: AuthContextDep(require_openrouter_key=False),
+    work_queue_service: WorkQueueServiceDep,
+) -> WorkQueueStateResponse:
+    """
+    Get the current state of the work queue.
+
+    Shows the item currently being processed (if any) and all items waiting in the queue.
+    Each item carries the task_id and step_id it refers to, making it straightforward
+    to correlate queue activity with specific tasks.
+    """
+    current = work_queue_service.get_current_item()
+    pending = work_queue_service.get_pending_items()
+    stopped_tasks = work_queue_service.get_stopped_tasks()
+
+    return WorkQueueStateResponse(
+        currently_processing=current.to_response() if current else None,
+        pending=[item.to_response() for item in pending],
+        stopped_tasks=stopped_tasks,
     )
 
 

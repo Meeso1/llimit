@@ -176,3 +176,61 @@ class TaskResult:
             total_estimated_cost_usd=task.total_estimated_cost_usd,
             total_or_cost_usd=task.total_or_cost_usd,
         )
+
+
+@dataclass
+class WorkQueueItemInfo:
+    """A single item in the work queue from GET /task/queue."""
+
+    task_id: str
+    step_id: str | None
+    step_number: int | None
+    item_type: str
+    enqueue_time: datetime | None
+    start_time: datetime | None
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> WorkQueueItemInfo:
+        return cls(
+            task_id=data["task_id"],
+            step_id=data.get("step_id"),
+            step_number=data.get("step_number"),
+            item_type=data["item_type"],
+            enqueue_time=_parse_dt(data.get("enqueue_time")),
+            start_time=_parse_dt(data.get("start_time")),
+        )
+
+
+@dataclass
+class StoppedTaskInfo:
+    """A task that is in an active state but has no queue items."""
+
+    task_id: str
+    title: str | None
+    status: str
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> StoppedTaskInfo:
+        return cls(
+            task_id=data["task_id"],
+            title=data.get("title"),
+            status=data["status"],
+        )
+
+
+@dataclass
+class WorkQueueState:
+    """Response from GET /task/queue."""
+
+    currently_processing: WorkQueueItemInfo | None
+    pending: list[WorkQueueItemInfo]
+    stopped_tasks: list[StoppedTaskInfo]
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> WorkQueueState:
+        raw_current = data.get("currently_processing")
+        return cls(
+            currently_processing=WorkQueueItemInfo.from_json(raw_current) if raw_current else None,
+            pending=[WorkQueueItemInfo.from_json(i) for i in data.get("pending", [])],
+            stopped_tasks=[StoppedTaskInfo.from_json(t) for t in data.get("stopped_tasks", [])],
+        )

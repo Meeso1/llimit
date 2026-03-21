@@ -1,12 +1,20 @@
 from enum import Enum
 
 
+class WorkItemType(str, Enum):
+    """Type of work item in the queue"""
+    DECOMPOSE_TASK = "decompose_task"
+    EXECUTE_STEP = "execute_step"
+    REEVALUATE = "reevaluate"
+
+
 class TaskStatus(str, Enum):
     PENDING = "pending"
     DECOMPOSING = "decomposing"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
+    STOPPED = "stopped"  # Was active when the server stopped; requires manual intervention to resume
 
 
 class StepStatus(str, Enum):

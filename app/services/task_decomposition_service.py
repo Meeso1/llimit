@@ -130,8 +130,8 @@ class TaskDecompositionService:
         )
         
         if len(steps) > 0:
-            return [WorkQueueItem.make_task_step_execution_item(updated_task, steps[0].id, api_key)]
-        
+            return [WorkQueueItem.make_task_step_execution_item(updated_task, steps[0].id, steps[0].step_number, api_key)]
+
         return []
     
     async def reevaluate_and_queue_task(
@@ -202,21 +202,23 @@ class TaskDecompositionService:
         
         self.task_repo.mark_steps_as_abandoned_after(task.id, reevaluate_step.step_number)
         
+        if not new_steps_defs:
+            raise TaskDecompositionError(
+                f"Reevaluation for task {task.id} produced no new steps — task cannot continue"
+            )
+
         new_steps = self.task_repo.insert_new_steps_after_reevaluation(
             task_id=task.id,
             after_step_number=reevaluate_step.step_number,
             new_steps=new_steps_defs,
         )
-        
+
         await self.sse_service.emit_event(
             user_id=user_id,
             event=create_task_steps_regenerated_event(task, new_steps),
         )
-        
-        if len(new_steps) > 0:
-            return [WorkQueueItem.make_task_step_execution_item(task, new_steps[0].id, api_key)]
-        
-        return []
+
+        return [WorkQueueItem.make_task_step_execution_item(task, new_steps[0].id, new_steps[0].step_number, api_key)]
     
     async def decompose_task(
         self,
