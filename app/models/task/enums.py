@@ -37,7 +37,6 @@ class ComplexityLevel(str, Enum):
     HIGH = "high"
 
 
-# TODO: Add PDF capabilities - native, PDF-text, mistral-OCR
 class ModelCapability(str, Enum):
     REASONING = "reasoning"
     EXA_SEARCH = "exa_search"

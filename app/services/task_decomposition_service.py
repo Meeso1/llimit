@@ -41,6 +41,9 @@ from prompts.task_prompts import (
 )
 
 
+DECOMPOSITION_MODEL_ID = "google/gemini-3.1-pro-preview"
+
+
 class TaskDecompositionError(Exception):
     pass
 
@@ -228,7 +231,7 @@ class TaskDecompositionService:
         """Decomposes a user task into a structured sequence of steps."""
         messages = self._build_messages(task)
         logger = self.llm_logging_service.create_for_task(task.id)
-        model_id = "google/gemini-2.5-pro"
+        model_id = DECOMPOSITION_MODEL_ID
         
         config = LlmConfig(
             reasoning=ReasoningConfig.with_medium_effort(),
@@ -310,7 +313,7 @@ class TaskDecompositionService:
             messages = self._build_failure_reevaluation_messages(task, reevaluate_step, previous_steps, abandoned_steps)
         
         logger = self.llm_logging_service.create_for_task(task.id)
-        model_id = "google/gemini-2.5-pro"
+        model_id = DECOMPOSITION_MODEL_ID
         
         config = LlmConfig(
             reasoning=ReasoningConfig.with_medium_effort(),

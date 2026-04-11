@@ -153,6 +153,8 @@ class PromptPricingService:
                 cost += self._calculate_audio_cost(audio_type, file_metadata, model_pricing, omit_token_costs)
             else:
                 raise ValueError(f"Unsupported file type: {file_metadata.content_type}")
+            
+        return cost
 
     def _calculate_image_cost(self, image_type: ImageType, metadata: FileMetadata, model_pricing: ModelPricing) -> float:
         return model_pricing.image or 0.0 # images are priced per image, regardless of size

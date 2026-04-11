@@ -16,13 +16,20 @@ Usage example:
 """
 import argparse
 import asyncio
-import dataclasses
 import json
 import os
 import random
 import time
+from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
+
+from rich import box
+from rich.console import Console, Group
+from rich.live import Live
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 from evaluation.gaia.loader import load_gaia
 from evaluation.gaia.models import GaiaConfig, GaiaSample, GaiaSplit
@@ -31,13 +38,15 @@ from evaluation.gaia.scoring import extract_answer, is_correct
 from evaluation.llimit_client.client import LlimitClient, LlimitConfig
 from evaluation.llimit_client.dtos import TaskResult
 
+console = Console()
+
 _UNSUPPORTED_TOOLS: set[GaiaTool] = {
     "youtube",
     "web_file_download",
     "python",
     "powerpoint_viewer",
     "google_maps",
-    
+
 }
 
 SUPPORTED_FILE_EXTENSIONS: set[str] = {
@@ -75,7 +84,7 @@ TASK_PROMPT_TEMPLATE = (
 # ---------------------------------------------------------------------------
 
 
-@dataclasses.dataclass
+@dataclass
 class EvalResult:
     """Evaluation result for a single GAIA sample."""
 
@@ -87,7 +96,8 @@ class EvalResult:
     correct: bool
     task_status: str
     error: str | None
-    cost_usd: float
+    estimated_cost_usd: float
+    or_cost_usd: float
     llimit_task_id: str | None
     duration_seconds: float
 
@@ -104,6 +114,7 @@ async def evaluate_sample(
     task_result: TaskResult | None = None
     error: str | None = None
 
+    timed_out = False
     try:
         file_ids: list[str] = []
         if sample.file_path:
@@ -115,6 +126,9 @@ async def evaluate_sample(
         llimit_task_id = (await client.create_task(prompt, file_ids)).id
         task_result = await client.wait_for_task(llimit_task_id, timeout=task_timeout)
 
+    except TimeoutError as exc:
+        timed_out = True
+        error = str(exc)
     except Exception as exc:
         error = str(exc)
 
@@ -130,6 +144,13 @@ async def evaluate_sample(
         else False
     )
 
+    if task_result is not None:
+        task_status = task_result.status
+    elif timed_out:
+        task_status = "timeout"
+    else:
+        task_status = "error"
+
     return EvalResult(
         gaia_task_id=sample.task_id,
         question=sample.question,
@@ -137,12 +158,141 @@ async def evaluate_sample(
         expected_answer=sample.final_answer,
         predicted_answer=predicted_answer,
         correct=correct,
-        task_status=task_result.status if task_result else "error",
+        task_status=task_status,
         error=error,
-        cost_usd=task_result.total_or_cost_usd if task_result else 0.0,
+        estimated_cost_usd=task_result.total_estimated_cost_usd if task_result else 0.0,
+        or_cost_usd=task_result.total_or_cost_usd if task_result else 0.0,
         llimit_task_id=llimit_task_id,
         duration_seconds=round(duration, 2),
     )
+
+
+# ---------------------------------------------------------------------------
+# Live display helpers
+# ---------------------------------------------------------------------------
+
+
+def _is_timed_out(r: EvalResult) -> bool:
+    """Return True if the task exceeded the per-task timeout."""
+    return r.task_status == "timeout"
+
+
+def _is_errored(r: EvalResult) -> bool:
+    """Return True if the task errored (excluding timeouts and wrong answers)."""
+    return not _is_timed_out(r) and (r.error is not None or r.task_status in ("failed", "error"))
+
+
+@dataclass
+class _RunState:
+    """Mutable evaluation progress state for the live display."""
+
+    total: int
+    in_progress: dict[int, tuple[GaiaSample, float]] = field(default_factory=dict)
+    completed: list[tuple[int, GaiaSample, EvalResult]] = field(default_factory=list)
+
+
+def _render_live(state: _RunState) -> Group:
+    """Build the Rich renderable for the live evaluation display."""
+    n_done = len(state.completed)
+    n_correct = sum(1 for _, _, r in state.completed if r.correct)
+    n_timeout = sum(1 for _, _, r in state.completed if _is_timed_out(r) and not r.correct)
+    n_error = sum(1 for _, _, r in state.completed if _is_errored(r) and not r.correct)
+    n_wrong = n_done - n_correct - n_timeout - n_error
+
+    header = Text()
+    header.append(f"Progress: {n_done}/{state.total}   ")
+    header.append(f"✓ {n_correct} correct   ", style="bold green")
+    header.append(f"✗ {n_wrong} wrong   ", style="bold red")
+    header.append(f"⏱ {n_timeout} timeout   ", style="bold magenta")
+    header.append(f"! {n_error} error(s)", style="bold yellow")
+
+    parts: list = [header]
+
+    if state.in_progress:
+        tbl = Table(box=box.SIMPLE, show_header=True, header_style="bold cyan", padding=(0, 1))
+        tbl.add_column("#", width=5)
+        tbl.add_column("lvl", width=3)
+        tbl.add_column("question")
+        tbl.add_column("elapsed", width=8, justify="right")
+        for idx, (sample, start) in sorted(state.in_progress.items()):
+            elapsed = time.monotonic() - start
+            q = sample.question.replace("\n", " ")
+            if len(q) > 70:
+                q = q[:70] + "…"
+            tbl.add_row(str(idx + 1), sample.level, q, f"{elapsed:.0f}s")
+        parts.append(Panel(tbl, title="[cyan]In Progress[/cyan]", border_style="cyan"))
+
+    if state.completed:
+        recent = state.completed[-15:]
+        tbl2 = Table(box=box.SIMPLE, show_header=False, padding=(0, 1))
+        tbl2.add_column("n", width=9)
+        tbl2.add_column("status", width=10)
+        tbl2.add_column("lvl", width=3)
+        tbl2.add_column("expected", width=22)
+        tbl2.add_column("got", width=22)
+        tbl2.add_column("cost", width=9)
+        tbl2.add_column("dur", width=6, justify="right")
+        for idx, sample, r in recent:
+            if r.correct:
+                badge = Text("✓ CORRECT", style="green")
+            elif _is_timed_out(r):
+                badge = Text("⏱ TIMEOUT", style="magenta")
+            elif _is_errored(r):
+                badge = Text("! ERROR  ", style="yellow")
+            else:
+                badge = Text("✗ WRONG  ", style="red")
+
+            exp = repr(r.expected_answer)
+            if len(exp) > 20:
+                exp = exp[:19] + "…"
+
+            got_str: str
+            if r.predicted_answer is not None:
+                got_str = repr(r.predicted_answer)
+                if len(got_str) > 20:
+                    got_str = got_str[:19] + "…"
+            else:
+                got_str = "(none)"
+
+            tbl2.add_row(
+                f"[{idx + 1:>3}/{state.total}]",
+                badge,
+                sample.level,
+                exp,
+                got_str,
+                f"${r.or_cost_usd:.4f}",
+                f"{r.duration_seconds:.0f}s",
+            )
+        parts.append(Panel(tbl2, title="Recent Results", border_style="dim"))
+
+    return Group(*parts)
+
+
+# ---------------------------------------------------------------------------
+# Post-completion cost reconciliation
+# ---------------------------------------------------------------------------
+
+
+async def _reconcile_costs(results: list[EvalResult], client: LlimitClient) -> None:
+    """Fetch final costs for tasks that completed without a task_result (errors/timeouts).
+
+    Timed-out tasks keep running on the server after we stop waiting; errored tasks may
+    have already incurred partial costs. We do a best-effort GET for each such task and
+    update both cost fields in-place.
+    """
+    targets = [r for r in results if r.llimit_task_id is not None and r.or_cost_usd == 0.0]
+    if not targets:
+        return
+
+    async def _update(r: EvalResult) -> None:
+        try:
+            task = await client.get_task(r.llimit_task_id)  # type: ignore[arg-type]
+            r.estimated_cost_usd = task.total_estimated_cost_usd
+            r.or_cost_usd = task.total_or_cost_usd
+        except Exception:
+            pass
+
+    await asyncio.gather(*[_update(r) for r in targets])
 
 
 # ---------------------------------------------------------------------------
@@ -159,52 +309,50 @@ async def run_evaluation(
     args: argparse.Namespace,
     output_path: Path,
 ) -> list[EvalResult]:
-    """Evaluate all samples concurrently, respecting the worker limit.
-
-    On cancellation, in-flight tasks are cancelled, partial results are saved,
-    and CancelledError is re-raised.
-    """
+    """Evaluate all samples concurrently with a live Rich display."""
     semaphore = asyncio.Semaphore(workers)
     results: list[EvalResult | None] = [None] * len(samples)
+    state = _RunState(total=len(samples))
 
     async def _run(index: int, sample: GaiaSample) -> None:
         async with semaphore:
+            state.in_progress[index] = (sample, time.monotonic())
             result = await evaluate_sample(sample, data_dir, client, task_timeout)
+            del state.in_progress[index]
             results[index] = result
-            _print_result(index + 1, len(samples), sample, result)
+            state.completed.append((index, sample, result))
 
-    tasks = [asyncio.create_task(_run(i, s)) for i, s in enumerate(samples)]
-    try:
-        await asyncio.gather(*tasks)
-    except asyncio.CancelledError:
-        for t in tasks:
-            t.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        partial = [r for r in results if r is not None]
-        print(f"\nInterrupted after {len(partial)}/{len(samples)} samples. Saving partial results...")
-        _print_and_save(partial, args, output_path)
-        raise
+    with Live(console=console, refresh_per_second=4) as live:
+        async def _refresh_loop() -> None:
+            while True:
+                live.update(_render_live(state))
+                await asyncio.sleep(0.25)
+
+        eval_tasks = [asyncio.create_task(_run(i, s)) for i, s in enumerate(samples)]
+        refresh_task = asyncio.create_task(_refresh_loop())
+        try:
+            await asyncio.gather(*eval_tasks)
+            partial = [r for r in results if r is not None]
+            await _reconcile_costs(partial, client)
+        except asyncio.CancelledError:
+            for t in eval_tasks:
+                t.cancel()
+            await asyncio.gather(*eval_tasks, return_exceptions=True)
+            partial = [r for r in results if r is not None]
+            await _reconcile_costs(partial, client)
+            refresh_task.cancel()
+            live.update(_render_live(state))
+            console.print(
+                f"\n[yellow]Interrupted after {len(partial)}/{len(samples)} samples. "
+                f"Saving partial results...[/yellow]"
+            )
+            _print_and_save(partial, args, output_path)
+            raise
+        finally:
+            refresh_task.cancel()
+            live.update(_render_live(state))
 
     return [r for r in results if r is not None]
-
-
-def _print_result(
-    n: int,
-    total: int,
-    sample: GaiaSample,
-    result: EvalResult,
-) -> None:
-    status = "CORRECT" if result.correct else "WRONG  "
-    error_note = f"  ERROR: {result.error}" if result.error else ""
-    print(
-        f"[{n:>3}/{total}] {status}  level={sample.level}"
-        f"  id={sample.task_id}"
-        f"  expected={sample.final_answer!r}"
-        f"  got={result.predicted_answer!r}"
-        f"  cost=${result.cost_usd:.4f}"
-        f"  {result.duration_seconds:.1f}s"
-        f"{error_note}"
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +364,11 @@ def compute_summary(results: list[EvalResult]) -> dict:
     """Compute aggregate accuracy metrics from evaluation results."""
     total = len(results)
     correct = sum(1 for r in results if r.correct)
-    total_cost = sum(r.cost_usd for r in results)
+    timed_out = sum(1 for r in results if _is_timed_out(r) and not r.correct)
+    errored = sum(1 for r in results if _is_errored(r) and not r.correct)
+    wrong = total - correct - timed_out - errored
+    total_or_cost = sum(r.or_cost_usd for r in results)
+    total_estimated_cost = sum(r.estimated_cost_usd for r in results)
 
     by_level: dict[str, dict[str, int]] = {}
     for r in results:
@@ -233,8 +385,12 @@ def compute_summary(results: list[EvalResult]) -> dict:
     return {
         "total": total,
         "correct": correct,
+        "wrong": wrong,
+        "timed_out": timed_out,
+        "errored": errored,
         "accuracy": correct / total if total > 0 else 0.0,
-        "total_cost_usd": round(total_cost, 6),
+        "total_or_cost_usd": round(total_or_cost, 6),
+        "total_estimated_cost_usd": round(total_estimated_cost, 6),
         "by_level": level_accuracy,
     }
 
@@ -244,14 +400,77 @@ def _print_and_save(
     args: argparse.Namespace,
     output_path: Path,
 ) -> None:
-    """Print the summary statistics and persist results to disk."""
+    """Print Rich summary tables and persist results to disk."""
     summary = compute_summary(results)
-    print(f"\n{'=' * 60}")
-    print(f"Accuracy: {summary['correct']}/{summary['total']} ({summary['accuracy']:.1%})")
-    print(f"Total cost: ${summary['total_cost_usd']:.4f}")
+
+    tbl = Table(box=box.ROUNDED, show_header=False, padding=(0, 2))
+    tbl.add_column("metric", style="bold")
+    tbl.add_column("value")
+    tbl.add_row(
+        "Accuracy",
+        f"[bold]{summary['correct']}/{summary['total']}[/bold] ({summary['accuracy']:.1%})",
+    )
+    tbl.add_row("Wrong answers", str(summary["wrong"]))
+    tbl.add_row("Timed out", str(summary["timed_out"]))
+    tbl.add_row("Errors", str(summary["errored"]))
+    tbl.add_row("Total cost (OpenRouter)", f"${summary['total_or_cost_usd']:.4f}")
+    tbl.add_row("Total cost (estimated)", f"${summary['total_estimated_cost_usd']:.4f}")
     for lvl, stats in summary["by_level"].items():
-        print(f"  Level {lvl}: {stats['correct']}/{stats['total']} ({stats['accuracy']:.1%})")
+        tbl.add_row(f"  Level {lvl}", f"{stats['correct']}/{stats['total']} ({stats['accuracy']:.1%})")
+    console.print(Panel(tbl, title="[bold]Evaluation Summary[/bold]", border_style="blue"))
+
+    wrong = [r for r in results if not r.correct and not _is_timed_out(r) and not _is_errored(r)]
+    if wrong:
+        wt = Table(box=box.SIMPLE, show_header=True, padding=(0, 1))
+        wt.add_column("gaia_task_id", width=36)
+        wt.add_column("expected", width=30)
+        wt.add_column("got", width=30)
+        wt.add_column("or_cost", width=9)
+        wt.add_column("dur", width=6, justify="right")
+        for r in wrong:
+            wt.add_row(
+                r.gaia_task_id,
+                repr(r.expected_answer),
+                repr(r.predicted_answer) if r.predicted_answer is not None else "[dim](none)[/dim]",
+                f"${r.or_cost_usd:.4f}",
+                f"{r.duration_seconds:.0f}s",
+            )
+        console.print(Panel(wt, title=f"[red]Wrong Answers ({len(wrong)})[/red]", border_style="red"))
+
+    timeouts = [r for r in results if _is_timed_out(r) and not r.correct]
+    if timeouts:
+        tt = Table(box=box.SIMPLE, show_header=True, padding=(0, 1))
+        tt.add_column("gaia_task_id", width=36)
+        tt.add_column("llimit_task_id", width=36)
+        tt.add_column("or_cost", width=9)
+        tt.add_column("dur", width=6, justify="right")
+        for r in timeouts:
+            tt.add_row(
+                r.gaia_task_id,
+                r.llimit_task_id or "[dim](none)[/dim]",
+                f"${r.or_cost_usd:.4f}",
+                f"{r.duration_seconds:.0f}s",
+            )
+        console.print(Panel(tt, title=f"[magenta]Timed Out ({len(timeouts)})[/magenta]", border_style="magenta"))
+
+    errors = [r for r in results if _is_errored(r) and not r.correct]
+    if errors:
+        et = Table(box=box.SIMPLE, show_header=True, padding=(0, 1))
+        et.add_column("gaia_task_id", width=36)
+        et.add_column("status", width=10)
+        et.add_column("or_cost", width=9)
+        et.add_column("error / reason")
+        for r in errors:
+            et.add_row(
+                r.gaia_task_id,
+                r.task_status,
+                f"${r.or_cost_usd:.4f}",
+                r.error or "[dim](task failed, no output)[/dim]",
+            )
+        console.print(Panel(et, title=f"[yellow]Errors ({len(errors)})[/yellow]", border_style="yellow"))
+
     save_results(results, summary, args, output_path)
+    console.print(f"\n[dim]Results saved to: {output_path}[/dim]")
 
 
 def save_results(
@@ -275,11 +494,10 @@ def save_results(
             "seed": args.seed if args.shuffle else None,
         },
         "summary": summary,
-        "results": [dataclasses.asdict(r) for r in results],
+        "results": [asdict(r) for r in results],
     }
     with output_path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2, ensure_ascii=False)
-    print(f"\nResults saved to: {output_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -367,18 +585,18 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 async def _async_main(args: argparse.Namespace) -> None:
-    print(f"Loading GAIA dataset ({args.dataset_config}, {args.split})...")
+    console.print(f"Loading GAIA dataset ([bold]{args.dataset_config}[/bold], {args.split})...")
     samples, data_dir = load_gaia(config=args.dataset_config, split=args.split)
 
     before_filter = len(samples)
     samples = [s for s in samples if _is_supported(s)]
     skipped = before_filter - len(samples)
     if skipped:
-        print(f"Skipped {skipped} sample(s) with unsupported requirements.")
+        console.print(f"[dim]Skipped {skipped} sample(s) with unsupported requirements.[/dim]")
 
     if args.shuffle or args.seed is not None:
         seed = args.seed if args.seed is not None else random.randrange(2**32)
-        print(f"Shuffling samples with seed={seed}")
+        console.print(f"Shuffling samples with seed={seed}")
         rng = random.Random(seed)
         rng.shuffle(samples)
         args.shuffle = True
@@ -387,7 +605,10 @@ async def _async_main(args: argparse.Namespace) -> None:
     if args.limit is not None:
         samples = samples[: args.limit]
 
-    print(f"Evaluating {len(samples)} samples  (workers={args.workers}, timeout={args.task_timeout}s)\n")
+    console.print(
+        f"Evaluating [bold]{len(samples)}[/bold] samples  "
+        f"(workers={args.workers}, timeout={args.task_timeout}s)\n"
+    )
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = Path(
