@@ -15,8 +15,10 @@ class TaskResponse(BaseModel):
         description="Whether the task has been decomposed into steps yet"
     )
     output: str | None = Field(None, description="Output from the last step of the task")
-    total_estimated_cost_usd: float = Field(description="Total cost estimated from token counts and pricing data")
-    total_or_cost_usd: float = Field(description="Total cost reported by OpenRouter")
+    total_pre_request_estimated_cost_usd: float = Field(description="Pre-request estimated cost of step-execution calls (estimated input + predicted output tokens)")
+    total_post_request_estimated_cost_usd: float = Field(description="Post-request estimated cost of step-execution calls (estimated input + real output tokens)")
+    total_or_cost_usd: float = Field(description="OpenRouter-reported cost of step-execution calls")
+    total_planning_or_cost_usd: float = Field(description="OpenRouter-reported cost of planning calls (decomposition and reevaluation)")
 
 
 class TaskListResponse(BaseModel):

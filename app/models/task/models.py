@@ -19,14 +19,28 @@ class Task:
     output: str | None
     attached_file_ids: list[str]
 
-    def with_cost(self, total_estimated_cost_usd: float, total_or_cost_usd: float) -> "TaskWithCost":
-        return TaskWithCost(**self.__dict__, total_estimated_cost_usd=total_estimated_cost_usd, total_or_cost_usd=total_or_cost_usd)
+    def with_cost(
+        self,
+        total_pre_request_estimated_cost_usd: float,
+        total_post_request_estimated_cost_usd: float,
+        total_or_cost_usd: float,
+        total_planning_or_cost_usd: float,
+    ) -> "TaskWithCost":
+        return TaskWithCost(
+            **self.__dict__,
+            total_pre_request_estimated_cost_usd=total_pre_request_estimated_cost_usd,
+            total_post_request_estimated_cost_usd=total_post_request_estimated_cost_usd,
+            total_or_cost_usd=total_or_cost_usd,
+            total_planning_or_cost_usd=total_planning_or_cost_usd,
+        )
 
 
 @dataclass
 class TaskWithCost(Task):
-    total_estimated_cost_usd: float = 0.0
+    total_pre_request_estimated_cost_usd: float = 0.0
+    total_post_request_estimated_cost_usd: float = 0.0
     total_or_cost_usd: float = 0.0
+    total_planning_or_cost_usd: float = 0.0
 
     def to_response(self) -> TaskResponse:
         return TaskResponse(
@@ -38,8 +52,10 @@ class TaskWithCost(Task):
             completed_at=self.completed_at,
             steps_generated=self.steps_generated,
             output=self.output,
-            total_estimated_cost_usd=self.total_estimated_cost_usd,
+            total_pre_request_estimated_cost_usd=self.total_pre_request_estimated_cost_usd,
+            total_post_request_estimated_cost_usd=self.total_post_request_estimated_cost_usd,
             total_or_cost_usd=self.total_or_cost_usd,
+            total_planning_or_cost_usd=self.total_planning_or_cost_usd,
         )
 
 

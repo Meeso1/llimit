@@ -1,6 +1,14 @@
 from enum import Enum
 
 
+class CostKind(str, Enum):
+    """Discriminator for task cost entries."""
+    ESTIMATED_PRE_REQUEST = "estimated_pre_request"
+    ESTIMATED_POST_REQUEST = "estimated_post_request"
+    OPENROUTER = "openrouter"
+    PLANNING_OPENROUTER = "planning_openrouter"
+
+
 class WorkItemType(str, Enum):
     """Type of work item in the queue"""
     DECOMPOSE_TASK = "decompose_task"

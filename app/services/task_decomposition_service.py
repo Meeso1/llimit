@@ -13,8 +13,6 @@ from utils import not_none
 from app.events.task_events import create_task_step_completed_event, create_task_steps_generated_event, create_task_steps_regenerated_event
 from app.services.llm.llm_service_base import LlmService, LlmMessage
 from app.services.sse_service import SseService
-from app.services.prompt_pricing_service import PromptPricingService
-from app.services.tokenization_service import TokenizationService
 from app.models.task.models import (
     TaskDecompositionResult,
     TaskStepDefinition,
@@ -57,18 +55,14 @@ class TaskDecompositionService:
         file_repo: FileRepo,
         sse_service: SseService,
         llm_logging_service: LlmLoggingService,
-        pricing_service: PromptPricingService,
         cost_repo: TaskCostRepo,
-        tokenization_service: TokenizationService,
     ) -> None:
         self.llm_service = llm_service
         self.task_repo = task_repo
         self.file_repo = file_repo
         self.sse_service = sse_service
         self.llm_logging_service = llm_logging_service
-        self.pricing_service = pricing_service
         self.cost_repo = cost_repo
-        self.tokenization_service = tokenization_service
 
     def _format_capabilities(self) -> str:
         """Format capabilities with their descriptions for prompts."""
@@ -254,16 +248,8 @@ class TaskDecompositionService:
             logger=logger,
         )
         
-        # Track cost for this LLM call
-        self.cost_repo.add_cost_increment(
+        self.cost_repo.add_planning_cost_increment(
             task.id,
-            await self.pricing_service.estimate_post_request_cost(
-                model_id,
-                self.tokenization_service.count_tokens(messages[0].content),
-                not_none(response.completion_tokens, "completion tokens in LLM response"),
-                [],
-                config,
-            ),
             not_none(response.response_cost_usd, "OR cost in LLM response"),
         )
 
@@ -341,16 +327,8 @@ class TaskDecompositionService:
             logger=logger,
         )
         
-        # Track cost for this LLM call
-        self.cost_repo.add_cost_increment(
+        self.cost_repo.add_planning_cost_increment(
             task.id,
-            await self.pricing_service.estimate_post_request_cost(
-                model_id,
-                sum(self.tokenization_service.count_tokens(m.content) for m in messages),
-                not_none(response.completion_tokens, "completion tokens in LLM response"),
-                [],
-                config,
-            ),
             not_none(response.response_cost_usd, "OR cost in LLM response"),
         )
 

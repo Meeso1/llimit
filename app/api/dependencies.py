@@ -93,9 +93,7 @@ _task_decomposition_service_instance = TaskDecompositionService(
     file_repo=_file_repo_instance,
     sse_service=_sse_service_instance,
     llm_logging_service=_llm_logging_service_instance,
-    pricing_service=_prompt_pricing_service_instance,
     cost_repo=_task_cost_repo_instance,
-    tokenization_service=_tokenization_service_instance,
 )
 _task_step_execution_service_instance = TaskStepExecutionService(
     task_repo=_task_repo_instance,

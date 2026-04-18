@@ -105,9 +105,11 @@ class TaskStepExecutionService:
         
         task = not_none(self.task_repo.get_task_by_id(task_id, user_id), f"Task {task_id}")
         
+        pre_request_cost_usd: float | None = None
         if step.model_name is None:
             step_def = step.to_step_definition()
             evaluation = await self.model_selection_service.select_model_for_step(step_def)
+            pre_request_cost_usd = evaluation.estimated_cost
             
             updated_step = not_none(self.task_repo.update_task_step(
                 step_id=step.id,
@@ -157,8 +159,11 @@ class TaskStepExecutionService:
             logger=logger,
         )
         
-        # Track cost for this LLM call
-        self.cost_repo.add_cost_increment(
+        # Track costs for this LLM call
+        if pre_request_cost_usd is not None:
+            self.cost_repo.add_pre_request_cost_increment(task.id, pre_request_cost_usd)
+        
+        self.cost_repo.add_post_request_cost_increment(
             task.id,
             await self.pricing_service.estimate_post_request_cost(
                 model_id,
@@ -167,6 +172,9 @@ class TaskStepExecutionService:
                 file_metadata_list,
                 config,
             ),
+        )
+        self.cost_repo.add_openrouter_cost_increment(
+            task.id,
             not_none(response.response_cost_usd, "OR cost in LLM response"),
         )
         

@@ -17,7 +17,12 @@ class TaskQueryService:
             return None
 
         totals = self.cost_repo.get_total_cost(task_id)
-        return task.with_cost(totals.estimated_usd, totals.or_usd)
+        return task.with_cost(
+            totals.pre_request_estimated_usd,
+            totals.post_request_estimated_usd,
+            totals.or_usd,
+            totals.planning_or_usd,
+        )
 
     def list_tasks_by_user(self, user_id: str) -> list[TaskWithCost]:
         """List all tasks for a user with cost information"""
@@ -26,6 +31,11 @@ class TaskQueryService:
         tasks_with_cost = []
         for task in tasks:
             totals = self.cost_repo.get_total_cost(task.id)
-            tasks_with_cost.append(task.with_cost(totals.estimated_usd, totals.or_usd))
+            tasks_with_cost.append(task.with_cost(
+                totals.pre_request_estimated_usd,
+                totals.post_request_estimated_usd,
+                totals.or_usd,
+                totals.planning_or_usd,
+            ))
         
         return tasks_with_cost
