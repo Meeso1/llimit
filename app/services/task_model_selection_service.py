@@ -10,15 +10,13 @@ from app.services.model_cache_service import ModelCacheService
 from app.services.model_selection.model_selection_api_service import ModelScoringApiService
 from app.services.model_selection.model_evaluation import ModelEvaluation
 from app.services.prompt_pricing_service import PromptPricingService
+from app.services.task_errors import TaskModelSelectionError
+from app.services.tokenization_service import TokenizationService
 from app.services import config_helpers
 from utils import not_none
 
 
-class TaskModelSelectionError(Exception):
-    pass
-
-
-class TaskModelSelectionService:    
+class TaskModelSelectionService:
     def __init__(
         self,
         model_cache_service: ModelCacheService,
@@ -26,15 +24,22 @@ class TaskModelSelectionService:
         allowed_models_repo: AllowedModelsRepo,
         model_scoring_service: ModelScoringApiService,
         pricing_service: PromptPricingService,
+        tokenization_service: TokenizationService,
+        override_model_id: str | None = None,
     ) -> None:
         self.model_cache_service = model_cache_service
         self.file_repo = file_repo
         self.allowed_models_repo = allowed_models_repo
         self.model_scoring_service = model_scoring_service
         self.pricing_service = pricing_service
-    
+        self.tokenization_service = tokenization_service
+        self.override_model_id = override_model_id
+
     async def select_model_for_step(self, step: NormalTaskStepDefinition) -> ModelEvaluation:
         """Select the best model for a step based on score and cost."""
+        if self.override_model_id is not None:
+            return await self._select_override_model(self.override_model_id, step)
+
         models = await self.model_cache_service.get_all_models()
         models = self._filter_by_allowlist(models)
         models = self._filter_by_input_modalities(step, models)
@@ -42,12 +47,41 @@ class TaskModelSelectionService:
             models = self._filter_by_capability(models, capability)
 
         if len(models) == 0:
-            # TODO: This should trigger a reevaluation step
-            raise TaskModelSelectionError("No models found that meet requirements")
-        
+            raise TaskModelSelectionError("No models found that meet requirements", should_reevaluate=True)
+
         model_ids = [model.id for model in models]
         evaluations = await self._evaluate_models(model_ids, step)
         return self._select_best_model(evaluations)
+
+    async def _select_override_model(self, model_id: str, step: NormalTaskStepDefinition) -> ModelEvaluation:
+        """Validate an override model against step requirements and return its evaluation."""
+        model = await self.model_cache_service.get_model_by_id(model_id)
+        if model is None:
+            raise TaskModelSelectionError(f"Override model '{model_id}' not found", should_reevaluate=False)
+
+        for file_id in step.required_file_ids:
+            file_metadata = self.file_repo.get_file_by_id(file_id)
+            if file_metadata is None:
+                raise TaskModelSelectionError(
+                    f"File {file_id} not found for step. This shouldn't happen if validation is correct.",
+                    should_reevaluate=False,
+                )
+            for modality in file_metadata.get_required_modalities():
+                if modality not in model.architecture.input_modalities:
+                    raise TaskModelSelectionError(
+                        f"Override model '{model_id}' does not support required input modality '{modality}'",
+                        should_reevaluate=False,
+                    )
+
+        for capability in step.required_capabilities:
+            filtered = self._filter_by_capability([model], capability)
+            if not filtered:
+                raise TaskModelSelectionError(
+                    f"Override model '{model_id}' does not satisfy required capability '{capability.value}'",
+                    should_reevaluate=False,
+                )
+
+        return ModelEvaluation(model_id=model_id, score=0.0, predicted_length=256.0, estimated_cost=0.0)
 
     def _filter_by_allowlist(self, models: list[ModelDescription]) -> list[ModelDescription]:
         """Filter models to the allowed-models list; returns all models if the list is empty"""
@@ -64,9 +98,10 @@ class TaskModelSelectionService:
             file_metadata = self.file_repo.get_file_by_id(file_id)
             if file_metadata is None:
                 raise TaskModelSelectionError(
-                    f"File {file_id} not found for step. This shouldn't happen if validation is correct."
+                    f"File {file_id} not found for step. This shouldn't happen if validation is correct.",
+                    should_reevaluate=False,
                 )
-            
+
             required_modalities.extend(file_metadata.get_required_modalities())
 
         return [model for model in models if all(modality in model.architecture.input_modalities for modality in required_modalities)]
@@ -86,7 +121,7 @@ class TaskModelSelectionService:
             case ModelCapability.NATIVE_PDF:
                 return [model for model in models if "file" in model.architecture.input_modalities]
             case _:
-                raise TaskModelSelectionError(f"Unknown capability: {capability}")
+                raise TaskModelSelectionError(f"Unknown capability: {capability}", should_reevaluate=False)
     
     async def _evaluate_models(
         self,
@@ -107,10 +142,7 @@ class TaskModelSelectionService:
                 for file_id in step.required_file_ids
             ]
             
-            # Estimate prompt tokens
-            # TODO: Implement proper token counting
-            # Rough estimate: 1 token per 4 characters
-            estimated_prompt_tokens = len(step.prompt) // 4
+            estimated_prompt_tokens = self.tokenization_service.count_tokens(step.prompt)
             
             # Calculate cost for each inference
             evaluations: list[ModelEvaluation] = []
@@ -128,7 +160,8 @@ class TaskModelSelectionService:
             return evaluations
         except Exception as e:
             raise TaskModelSelectionError(
-                f"Failed to evaluate models: {str(e)}"
+                f"Failed to evaluate models: {str(e)}",
+                should_reevaluate=False,
             ) from e
     
     def _select_best_model(self, evaluations: list[ModelEvaluation]) -> ModelEvaluation:

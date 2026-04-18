@@ -22,7 +22,6 @@ from app.services.llm.llm_service import OpenRouterLlmService
 from app.services.llm_logging_service import LlmLoggingService
 from app.services.model_cache_service import ModelCacheService
 from app.services.model_selection.model_selection_api_service import ModelScoringApiService
-from app.services.model_selection.dummy_model_scoring_service import DummyModelScoringService
 from app.services.file_metadata_processing_service import FileMetadataProcessingService
 from app.services.office_conversion_service import OfficeConversionService
 from app.services.pdf_analysis_service import PdfAnalysisService
@@ -73,15 +72,14 @@ _file_service_instance = FileService(
     _file_metadata_processing_service_instance,
     _office_conversion_service_instance,
 )
-_dummy_model_scoring_service_instance = DummyModelScoringService()
 _task_model_selection_service_instance = TaskModelSelectionService(
     model_cache_service=_model_cache_service_instance,
     file_repo=_file_repo_instance,
     allowed_models_repo=_allowed_models_repo_instance,
-    model_scoring_service=_dummy_model_scoring_service_instance \
-        if settings.use_dummy_model_scoring \
-        else _model_scoring_api_service_instance,
+    model_scoring_service=_model_scoring_api_service_instance,
     pricing_service=_prompt_pricing_service_instance,
+    tokenization_service=_tokenization_service_instance,
+    override_model_id=settings.override_step_model_id,
 )
 _chat_service_instance = ChatService(
     llm_service=_llm_service_instance,
@@ -97,6 +95,7 @@ _task_decomposition_service_instance = TaskDecompositionService(
     llm_logging_service=_llm_logging_service_instance,
     pricing_service=_prompt_pricing_service_instance,
     cost_repo=_task_cost_repo_instance,
+    tokenization_service=_tokenization_service_instance,
 )
 _task_step_execution_service_instance = TaskStepExecutionService(
     task_repo=_task_repo_instance,
@@ -108,6 +107,7 @@ _task_step_execution_service_instance = TaskStepExecutionService(
     llm_logging_service=_llm_logging_service_instance,
     pricing_service=_prompt_pricing_service_instance,
     cost_repo=_task_cost_repo_instance,
+    tokenization_service=_tokenization_service_instance,
 )
 _work_queue_service_instance = WorkQueueService(
     task_repo=_task_repo_instance,

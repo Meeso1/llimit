@@ -2,7 +2,6 @@ from app.models.file.models import AudioType, FileMetadata, ImageType, VideoType
 from app.models.model.models import ModelPricing
 from app.services.llm.config.pdf_config import PdfConfig, PdfEngine
 from app.services.llm.config.web_search_config import SearchContextSize
-from app.services.llm.llm_message import LlmMessage
 from app.services.llm.config.llm_config import LlmConfig
 from app.services.llm.config.reasoning_config import ReasoningEffort
 from app.services.model_cache_service import ModelCacheService
@@ -14,46 +13,6 @@ class PromptPricingService:
     def __init__(self, model_cache_service: ModelCacheService) -> None:
         self.model_cache_service = model_cache_service
 
-    async def calculate_cost(
-        self,
-        model_id: str,
-        llm_message: LlmMessage,
-        file_metadata_list: list[FileMetadata],
-        config: LlmConfig,
-    ) -> float:
-        """
-        Calculate the cost for a single LLM request/response.
-        
-        Args:
-            model_id: ID of the model used
-            llm_message: The assistant's response message (must have role="assistant")
-            file_metadata_list: List of file metadata for files included in the request
-            config: LLM configuration used for the request
-            
-        Returns:
-            Total cost in USD
-        """
-        if llm_message.role != "assistant":
-            raise ValueError("Cost calculation should only be called for an assistant message with token counts")
-
-        if llm_message.prompt_tokens is None or llm_message.completion_tokens is None:
-            raise ValueError("Token counts are not set for assistant message")
-
-        model_description = await self.model_cache_service.get_model_by_id(model_id)
-        if model_description is None:
-            raise ValueError(f"Model '{model_id}' not found")
-
-        model_pricing = model_description.pricing
-
-        return self._calculate_cost_internal(
-            prompt_tokens=llm_message.prompt_tokens,
-            completion_tokens=llm_message.completion_tokens,
-            file_metadata_list=file_metadata_list,
-            config=config,
-            model_pricing=model_pricing,
-            omit_token_costs=True, # Cost of thigns included in the prompt etc. is already included in the prompt tokens
-        )
-
     async def estimate_response_cost(
         self,
         model_id: str,
@@ -62,19 +21,7 @@ class PromptPricingService:
         file_metadata_list: list[FileMetadata],
         config: LlmConfig,
     ) -> float:
-        """
-        Estimate the cost for a potential LLM request/response before making the call.
-        
-        Args:
-            model_id: ID of the model to use
-            prompt_tokens: Number of tokens in the prompt
-            predicted_completion_tokens: Predicted number of completion tokens
-            file_metadata_list: List of file metadata for files included in the request
-            config: LLM configuration (reasoning, web search, etc.)
-            
-        Returns:
-            Estimated total cost in USD
-        """
+        """Estimate the cost for a potential LLM request/response before making the call."""
         model_description = await self.model_cache_service.get_model_by_id(model_id)
         if model_description is None:
             raise ValueError(f"Model '{model_id}' not found")
@@ -87,7 +34,37 @@ class PromptPricingService:
             file_metadata_list=file_metadata_list,
             config=config,
             model_pricing=model_pricing,
-            omit_token_costs=False, # Compute estimated token counts and their costs
+            omit_token_costs=False,
+        )
+
+    async def estimate_post_request_cost(
+        self,
+        model_id: str,
+        estimated_prompt_tokens: int,
+        completion_tokens: int,
+        file_metadata_list: list[FileMetadata],
+        config: LlmConfig,
+    ) -> float:
+        """Estimate cost post-request using estimated input tokens and real output tokens.
+
+        Uses the same formula as estimate_response_cost (omit_token_costs=False),
+        but substitutes the predicted completion length with the real value from the
+        API response. This isolates the contribution of output-length prediction error
+        to cost estimation error.
+        """
+        model_description = await self.model_cache_service.get_model_by_id(model_id)
+        if model_description is None:
+            raise ValueError(f"Model '{model_id}' not found")
+
+        model_pricing = model_description.pricing
+
+        return self._calculate_cost_internal(
+            prompt_tokens=estimated_prompt_tokens,
+            completion_tokens=completion_tokens,
+            file_metadata_list=file_metadata_list,
+            config=config,
+            model_pricing=model_pricing,
+            omit_token_costs=False,
         )
 
     def _calculate_cost_internal(

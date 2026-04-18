@@ -1,4 +1,8 @@
+import io
+import wave
 from typing import Any
+
+from mutagen.mp3 import MP3
 
 from app.services.office_conversion_service import OfficeConversionService, XLSX_CONTENT_TYPE, DOCX_CONTENT_TYPE
 from app.services.pdf_analysis_service import PdfAnalysisService
@@ -32,6 +36,8 @@ class FileMetadataProcessingService:
             text = self._office_conversion_service.extract_text(content_type, file_content)
             token_count = self._tokenization_service.count_tokens(text)
             return {"token_count": token_count}
+        elif content_type.startswith("audio/"):
+            return self._process_audio(content_type, file_content)
 
         return {}
 
@@ -45,6 +51,22 @@ class FileMetadataProcessingService:
             "text_token_count": analysis.text_token_count,
             "estimated_native_token_count": analysis.estimated_native_token_count,
         }
+
+    def _process_audio(self, content_type: str, audio_bytes: bytes) -> dict[str, Any]:
+        """Read audio duration from file headers without decoding audio data."""
+        try:
+            if content_type == "audio/wav":
+                with wave.open(io.BytesIO(audio_bytes)) as wf:
+                    length_seconds = wf.getnframes() / wf.getframerate()
+            elif content_type in ("audio/mp3", "audio/mpeg"):
+                audio = MP3(io.BytesIO(audio_bytes))
+                length_seconds = audio.info.length
+            else:
+                raise ValueError(f"Unexpected audio content type: {content_type}")
+
+            return {"length_seconds": length_seconds}
+        except Exception:
+            return {}
 
     def _process_text(self, text_bytes: bytes) -> dict[str, Any]:
         """Process text file and compute token count"""

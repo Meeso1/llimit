@@ -15,14 +15,12 @@ from app.models.task.models import TaskStep, NormalTaskStep
 from app.models.task.work_queue import WorkQueueItem
 from app.services.llm.llm_service_base import LlmService, LlmMessage
 from app.services.sse_service import SseService
+from app.services.task_errors import TaskStepExecutionError
 from app.services.task_model_selection_service import TaskModelSelectionService
 from app.services.prompt_pricing_service import PromptPricingService
+from app.services.tokenization_service import TokenizationService
 from app.services import config_helpers
 from prompts.task_prompts import TASK_STEP_OUTPUT_DESCRIPTION, TASK_STEP_FAILURE_REASON_DESCRIPTION
-
-
-class TaskStepExecutionError(Exception):
-    pass
 
 
 class TaskStepExecutionService:
@@ -39,6 +37,7 @@ class TaskStepExecutionService:
         llm_logging_service: LlmLoggingService,
         pricing_service: PromptPricingService,
         cost_repo: TaskCostRepo,
+        tokenization_service: TokenizationService,
     ) -> None:
         self.task_repo = task_repo
         self.file_repo = file_repo
@@ -49,18 +48,21 @@ class TaskStepExecutionService:
         self.llm_logging_service = llm_logging_service
         self.pricing_service = pricing_service
         self.cost_repo = cost_repo
+        self.tokenization_service = tokenization_service
     
     def _ensure_step_is_normal(self, step: TaskStep) -> NormalTaskStep:
         """Ensure the step is a normal step, raise error otherwise"""
         if step.step_type == StepType.REEVALUATE:
             raise TaskStepExecutionError(
                 f"Step {step.id} is a reevaluate step and should not be passed to execute_step. "
-                "Reevaluate steps are handled by the decomposition service."
+                "Reevaluate steps are handled by the decomposition service.",
+                should_reevaluate=False,
             )
-        
+
         if not isinstance(step, NormalTaskStep):
             raise TaskStepExecutionError(
-                f"Step {step.id} is not a normal step (type: {step.step_type})"
+                f"Step {step.id} is not a normal step (type: {step.step_type})",
+                should_reevaluate=False,
             )
         
         return step
@@ -74,7 +76,8 @@ class TaskStepExecutionService:
             file_metadata = self.file_repo.get_file_by_id_and_user(file_id, user_id)
             if file_metadata is None:
                 raise TaskStepExecutionError(
-                    f"File {file_id} not found for step {step.id}. This shouldn't happen if validation is correct."
+                    f"File {file_id} not found for step {step.id}. This shouldn't happen if validation is correct.",
+                    should_reevaluate=False,
                 )
             
             files.append(self.file_service.convert_file_to_llm_file(file_metadata))
@@ -115,7 +118,8 @@ class TaskStepExecutionService:
             
             if not isinstance(updated_step, NormalTaskStep):
                 raise TaskStepExecutionError(
-                    f"Step {step_id} changed type after update (expected NormalTaskStep, got {type(updated_step).__name__})"
+                    f"Step {step_id} changed type after update (expected NormalTaskStep, got {type(updated_step).__name__})",
+                    should_reevaluate=False,
                 )
             
             step = updated_step
@@ -138,7 +142,7 @@ class TaskStepExecutionService:
         config = self._build_llm_config(step)
         logger = self.llm_logging_service.create_for_task(task.id)
         
-        model_id = step.model_name or "google/gemini-2.5-flash-lite"
+        model_id = not_none(step.model_name, f"Model name for step {step.id}")
         
         response = await self.llm_service.get_completion(
             api_key=api_key,
@@ -156,7 +160,13 @@ class TaskStepExecutionService:
         # Track cost for this LLM call
         self.cost_repo.add_cost_increment(
             task.id,
-            await self.pricing_service.calculate_cost(model_id, response, file_metadata_list, config),
+            await self.pricing_service.estimate_post_request_cost(
+                model_id,
+                self.tokenization_service.count_tokens(step.prompt),
+                not_none(response.completion_tokens, "completion tokens in LLM response"),
+                file_metadata_list,
+                config,
+            ),
             not_none(response.response_cost_usd, "OR cost in LLM response"),
         )
         
@@ -264,7 +274,8 @@ class TaskStepExecutionService:
         
         if not completed_steps_with_output:
             raise TaskStepExecutionError(
-                f"Task {task.id} has no completed steps with output. Cannot complete task."
+                f"Task {task.id} has no completed steps with output. Cannot complete task.",
+                should_reevaluate=False,
             )
         
         final_output = completed_steps_with_output[-1].output

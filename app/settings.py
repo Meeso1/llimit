@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     model_selection_api_scoring_model: str | None = "dn_embedding/default_model"
     model_selection_api_length_prediction_model: str | None = "dn_embedding_length_prediction/default_model"
     model_selection_api_batch_size: int = 128
-    use_dummy_model_scoring: bool = False
+    override_step_model_id: str | None = None
     
     class Config:
         env_file = ".env"

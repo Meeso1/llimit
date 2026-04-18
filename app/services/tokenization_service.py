@@ -16,15 +16,6 @@ class TokenizationService:
         return self._encoder
 
     def count_tokens(self, text: str) -> int:
-        """
-        Count the number of tokens in the given text.
-        
-        Args:
-            text: The text to tokenize
-            tokenizer: The tokenizer to use (e.g., "GPT", "Claude", "Other")
-            
-        Returns:
-            Number of tokens in the text
-        """
+        """Count the number of tokens in the given text."""
         encoder = self._get_encoder()
         return len(encoder.encode(text))
