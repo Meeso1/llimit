@@ -146,18 +146,19 @@ class TaskModelSelectionService:
         best_model_id = normalized_entries[0].model_id
         best_utility = float('-inf')
         for normalized in normalized_entries:
-            # Scores and costs are z-scores (mean 0, std 1). Skip very poor scores or cost outliers in the cohort.
-            if normalized.cost > 3 or normalized.score < -2:
-                continue
-
-            # Higher score z is better; lower cost z is better (cheap models have negative cost z).
-            utility = normalized.score - normalized.cost
-            
+            utility = self._utility_function(normalized.score, normalized.cost)
             if utility > best_utility:
                 best_utility = utility
                 best_model_id = normalized.model_id
 
         return next(iter(e for e in evaluations if e.model_id == best_model_id))
+
+    def _utility_function(self, normalized_score: float, normalized_cost: float) -> float:
+        lambda_ = 5
+        k = 3
+        tau = 2
+        softplus = lambda x: math.log(1 + math.exp(x))
+        return normalized_score - normalized_cost - lambda_ * softplus(k * (normalized_cost - tau)) - lambda_ * softplus(k * (- normalized_score - tau))
     
     def _normalize_scores_and_costs(self, entries: list[ModelEvaluation]) -> list["_NormalizedEntry"]:
         """
