@@ -38,7 +38,7 @@ class ModelCacheService:
         # Exa search default: $4 per 1000 results
         web_search_price = float(pricing_data.get("web_search", 0)) if pricing_data.get("web_search") else None
         exa_search_price = 4.0 if web_search_price is None else (web_search_price * 1000.0 if web_search_price > 0 else None)
-        native_search_price = (web_search_price * 1000.0 if web_search_price and web_search_price > 0 else exa_search_price) if web_search_price is not None else exa_search_price
+        native_search_price = web_search_price * 1000.0 if (web_search_price is not None and web_search_price > 0) else None
         
         # OpenRouter returns cost per token, convert to per million
         pricing = ModelPricing(

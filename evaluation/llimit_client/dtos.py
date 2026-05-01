@@ -51,8 +51,10 @@ class Task:
     completed_at: datetime | None
     steps_generated: bool
     output: str | None
-    total_estimated_cost_usd: float
+    total_pre_request_estimated_cost_usd: float
+    total_post_request_estimated_cost_usd: float
     total_or_cost_usd: float
+    total_planning_or_cost_usd: float
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> Task:
@@ -65,8 +67,10 @@ class Task:
             completed_at=_parse_dt(data.get("completed_at")),
             steps_generated=data.get("steps_generated", False),
             output=data.get("output"),
-            total_estimated_cost_usd=float(data.get("total_estimated_cost_usd", 0.0)),
+            total_pre_request_estimated_cost_usd=float(data.get("total_pre_request_estimated_cost_usd", 0.0)),
+            total_post_request_estimated_cost_usd=float(data.get("total_post_request_estimated_cost_usd", 0.0)),
             total_or_cost_usd=float(data.get("total_or_cost_usd", 0.0)),
+            total_planning_or_cost_usd=float(data.get("total_planning_or_cost_usd", 0.0)),
         )
 
 
@@ -164,8 +168,10 @@ class TaskResult:
     task_id: str
     status: str
     output: str | None
-    total_estimated_cost_usd: float
+    total_pre_request_estimated_cost_usd: float
+    total_post_request_estimated_cost_usd: float
     total_or_cost_usd: float
+    total_planning_or_cost_usd: float
 
     @classmethod
     def from_task(cls, task: Task) -> TaskResult:
@@ -173,8 +179,10 @@ class TaskResult:
             task_id=task.id,
             status=task.status,
             output=task.output,
-            total_estimated_cost_usd=task.total_estimated_cost_usd,
+            total_pre_request_estimated_cost_usd=task.total_pre_request_estimated_cost_usd,
+            total_post_request_estimated_cost_usd=task.total_post_request_estimated_cost_usd,
             total_or_cost_usd=task.total_or_cost_usd,
+            total_planning_or_cost_usd=task.total_planning_or_cost_usd,
         )
 
 

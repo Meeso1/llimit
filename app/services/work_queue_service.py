@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from app.db.task_repo import TaskRepo
 from app.events.task_events import create_task_failed_event
-from app.models.task.enums import TaskStatus, WorkItemType
+from app.models.task.enums import TaskStatus, StepStatus, WorkItemType
 from app.models.task.work_queue import WorkQueueItem
 from app.models.task.responses import StoppedTaskInfo
 from app.services.sse_service import SseService
@@ -146,6 +146,14 @@ class WorkQueueService:
                         item.task_id, item.item_type.value, item.step_number, item.step_id, e,
                         exc_info=True,
                     )
+
+                    if item.step_id is not None:
+                        self.task_repo.update_task_step(
+                            step_id=item.step_id,
+                            status=StepStatus.FAILED,
+                            failure_reason=str(e),
+                            completed_at=datetime.now(timezone.utc),
+                        )
 
                     self.task_repo.update_task_final_status(
                         task_id=item.task_id,

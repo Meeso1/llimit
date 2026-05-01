@@ -89,14 +89,13 @@ class ModelDescription:
     @property
     def supports_native_web_search(self) -> bool:
         """Whether the model supports native web search via web_search_options parameter"""
-        # TODO: Verify and improve
-        if self.id.startswith("google/gemini-2.5-"):
+        if self.id.startswith("google/gemini-"):
             return True
 
         if self.id.startswith("perplexity/"):
             return True
 
-        return "web_search_options" in self.supported_parameters
+        return "web_search_options" in self.supported_parameters and self.pricing.native_search is not None
 
     def to_response(self) -> ModelDescriptionResponse:
         return ModelDescriptionResponse(

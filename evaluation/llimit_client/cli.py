@@ -98,8 +98,10 @@ def _print_task_pretty(t: Task) -> None:
     print(f"completed_at: {t.completed_at.isoformat() if t.completed_at else ''}")
     print(f"title:        {t.title or ''}")
     print(f"steps_gen:    {t.steps_generated}")
-    print(f"est_cost_usd: {t.total_estimated_cost_usd}")
+    print(f"est_pre_usd:  {t.total_pre_request_estimated_cost_usd}")
+    print(f"est_post_usd: {t.total_post_request_estimated_cost_usd}")
     print(f"or_cost_usd:  {t.total_or_cost_usd}")
+    print(f"plan_or_usd:  {t.total_planning_or_cost_usd}")
     print("prompt:")
     print(t.prompt)
     if t.output is not None:

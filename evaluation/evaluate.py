@@ -96,8 +96,10 @@ class EvalResult:
     correct: bool
     task_status: str
     error: str | None
-    estimated_cost_usd: float
+    pre_request_estimated_cost_usd: float
+    post_request_estimated_cost_usd: float
     or_cost_usd: float
+    planning_or_cost_usd: float
     llimit_task_id: str | None
     duration_seconds: float
 
@@ -160,8 +162,10 @@ async def evaluate_sample(
         correct=correct,
         task_status=task_status,
         error=error,
-        estimated_cost_usd=task_result.total_estimated_cost_usd if task_result else 0.0,
+        pre_request_estimated_cost_usd=task_result.total_pre_request_estimated_cost_usd if task_result else 0.0,
+        post_request_estimated_cost_usd=task_result.total_post_request_estimated_cost_usd if task_result else 0.0,
         or_cost_usd=task_result.total_or_cost_usd if task_result else 0.0,
+        planning_or_cost_usd=task_result.total_planning_or_cost_usd if task_result else 0.0,
         llimit_task_id=llimit_task_id,
         duration_seconds=round(duration, 2),
     )
@@ -287,8 +291,10 @@ async def _reconcile_costs(results: list[EvalResult], client: LlimitClient) -> N
     async def _update(r: EvalResult) -> None:
         try:
             task = await client.get_task(r.llimit_task_id)  # type: ignore[arg-type]
-            r.estimated_cost_usd = task.total_estimated_cost_usd
+            r.pre_request_estimated_cost_usd = task.total_pre_request_estimated_cost_usd
+            r.post_request_estimated_cost_usd = task.total_post_request_estimated_cost_usd
             r.or_cost_usd = task.total_or_cost_usd
+            r.planning_or_cost_usd = task.total_planning_or_cost_usd
         except Exception:
             pass
 
@@ -368,7 +374,9 @@ def compute_summary(results: list[EvalResult]) -> dict:
     errored = sum(1 for r in results if _is_errored(r) and not r.correct)
     wrong = total - correct - timed_out - errored
     total_or_cost = sum(r.or_cost_usd for r in results)
-    total_estimated_cost = sum(r.estimated_cost_usd for r in results)
+    total_planning_or_cost = sum(r.planning_or_cost_usd for r in results)
+    total_pre_request_estimated_cost = sum(r.pre_request_estimated_cost_usd for r in results)
+    total_post_request_estimated_cost = sum(r.post_request_estimated_cost_usd for r in results)
 
     by_level: dict[str, dict[str, int]] = {}
     for r in results:
@@ -390,7 +398,9 @@ def compute_summary(results: list[EvalResult]) -> dict:
         "errored": errored,
         "accuracy": correct / total if total > 0 else 0.0,
         "total_or_cost_usd": round(total_or_cost, 6),
-        "total_estimated_cost_usd": round(total_estimated_cost, 6),
+        "total_planning_or_cost_usd": round(total_planning_or_cost, 6),
+        "total_pre_request_estimated_cost_usd": round(total_pre_request_estimated_cost, 6),
+        "total_post_request_estimated_cost_usd": round(total_post_request_estimated_cost, 6),
         "by_level": level_accuracy,
     }
 
@@ -413,8 +423,10 @@ def _print_and_save(
     tbl.add_row("Wrong answers", str(summary["wrong"]))
     tbl.add_row("Timed out", str(summary["timed_out"]))
     tbl.add_row("Errors", str(summary["errored"]))
-    tbl.add_row("Total cost (OpenRouter)", f"${summary['total_or_cost_usd']:.4f}")
-    tbl.add_row("Total cost (estimated)", f"${summary['total_estimated_cost_usd']:.4f}")
+    tbl.add_row("Total cost (OpenRouter, steps)", f"${summary['total_or_cost_usd']:.4f}")
+    tbl.add_row("Total cost (OpenRouter, planning)", f"${summary['total_planning_or_cost_usd']:.4f}")
+    tbl.add_row("Total cost (estimated pre-request)", f"${summary['total_pre_request_estimated_cost_usd']:.4f}")
+    tbl.add_row("Total cost (estimated post-request)", f"${summary['total_post_request_estimated_cost_usd']:.4f}")
     for lvl, stats in summary["by_level"].items():
         tbl.add_row(f"  Level {lvl}", f"{stats['correct']}/{stats['total']} ({stats['accuracy']:.1%})")
     console.print(Panel(tbl, title="[bold]Evaluation Summary[/bold]", border_style="blue"))
